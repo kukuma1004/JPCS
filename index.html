@@ -3104,13 +3104,26 @@ function hostProbeHtml(){
 }
 
 async function afterAuth(user){
-  const {doc,getDoc}=FB.fs;
+  const {doc,getDoc,setDoc}=FB.fs;
   // 호스트 여부는 콘솔에서 직접 만든 hosts/{uid} 문서로만 정해진다 (스스로 부여 불가)
   await checkHost(user.uid);
   const p=await getDoc(doc(FB.db,'users',user.uid));
   if(!p.exists() && S.isHost){          // 학교 소속 없는 순수 호스트
-    S.me={uid:user.uid,role:'host',name:user.email||'호스트',email:user.email};
-    S.uid=user.uid; S.mode='cloud'; DB.cloud=true; S.school=null; S.authMsg='';
+    let profile=p.data();
+  if(profile.role==='student' && profile.accessCode){
+    try{
+      const cs=await getDoc(doc(FB.db,'codes',profile.accessCode));
+      if(cs.exists()){
+        const latest=cs.data();
+        if(latest.studentId!==profile.studentId || latest.schoolId!==profile.schoolId){
+          await setDoc(doc(FB.db,'users',user.uid),
+            {schoolId:latest.schoolId,studentId:latest.studentId},{merge:true});
+          profile={...profile,schoolId:latest.schoolId,studentId:latest.studentId};
+        }
+      }
+    }catch(e){}
+  }
+  S.me={uid:user.uid,...profile}; S.uid=user.uid; S.mode='cloud'; DB.cloud=true; S.school=null; S.authMsg='';
     render();
     const {collection,getDocs}=FB.fs;
     try{ const snap=await getDocs(collection(FB.db,'schools'));
