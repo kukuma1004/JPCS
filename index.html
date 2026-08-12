@@ -2966,10 +2966,11 @@ async function studentSignIn(code){
   try{ cred=await FB.au.signInWithEmailAndPassword(FB.auth,email,pw); }
   catch(e){ if(e.code==='auth/user-not-found'||e.code==='auth/invalid-credential'){
       cred=await FB.au.createUserWithEmailAndPassword(FB.auth,email,pw).catch(er=>{throw new Error(emsg(er));});
-      await setDoc(doc(FB.db,'users',cred.user.uid),{schoolId,studentId,role:'student',name:'',accessCode:code,approved:true});
     } else throw new Error(emsg(e)); }
+  // 신규/기존 계정 모두, 접속코드가 가리키는 최신 studentId로 항상 동기화
+  await setDoc(doc(FB.db,'users',cred.user.uid),
+    {schoolId,studentId,role:'student',accessCode:code,approved:true},{merge:true});
   await afterAuth(cred.user);
-  // 주소창에 코드가 남지 않게 정리합니다 (기록·공유 시 노출 방지)
   try{ history.replaceState(null,'',location.pathname+'?student'); }catch(e){}
 }
 
