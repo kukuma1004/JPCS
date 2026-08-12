@@ -3128,11 +3128,7 @@ async function afterAuth(user){
       const cs=await getDoc(doc(FB.db,'codes',profile.accessCode));
       if(cs.exists()){
         const latest=cs.data();
-        if(latest.studentId!==profile.studentId || latest.schoolId!==profile.schoolId){
-          await setDoc(doc(FB.db,'users',user.uid),
-            {schoolId:latest.schoolId,studentId:latest.studentId},{merge:true});
-          profile={...profile,schoolId:latest.schoolId,studentId:latest.studentId};
-        }
+        profile={...profile,schoolId:latest.schoolId,studentId:latest.studentId};
       }
     }catch(e){}
   }
