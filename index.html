@@ -3109,7 +3109,20 @@ async function afterAuth(user){
   await checkHost(user.uid);
   const p=await getDoc(doc(FB.db,'users',user.uid));
   if(!p.exists() && S.isHost){          // 학교 소속 없는 순수 호스트
-    let profile=p.data();
+    S.me={uid:user.uid,role:'host',name:user.email||'호스트',email:user.email};
+    S.uid=user.uid; S.mode='cloud'; DB.cloud=true; S.school=null; S.authMsg='';
+    render();
+    const {collection,getDocs}=FB.fs;
+    try{ const snap=await getDocs(collection(FB.db,'schools'));
+      S.schools=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    }catch(e){ S.schools=[]; toast('학교 목록을 불러오지 못했습니다. 규칙을 확인해주세요',5000); }
+    render(); return;
+  }
+  if(!p.exists()){
+    S.authMsg='로그인은 됐지만 프로필 문서가 없습니다. 가입이 중간에 끊겼거나 규칙이 막고 있을 수 있습니다.';
+    S.mode=null; render(); return; }
+
+  let profile=p.data();
   if(profile.role==='student' && profile.accessCode){
     try{
       const cs=await getDoc(doc(FB.db,'codes',profile.accessCode));
@@ -3123,18 +3136,8 @@ async function afterAuth(user){
       }
     }catch(e){}
   }
-  S.me={uid:user.uid,...profile}; S.uid=user.uid; S.mode='cloud'; DB.cloud=true; S.school=null; S.authMsg='';
-    render();
-    const {collection,getDocs}=FB.fs;
-    try{ const snap=await getDocs(collection(FB.db,'schools'));
-      S.schools=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-    }catch(e){ S.schools=[]; toast('학교 목록을 불러오지 못했습니다. 규칙을 확인해주세요',5000); }
-    render(); return;
-  }
-  if(!p.exists()){
-    S.authMsg='로그인은 됐지만 프로필 문서가 없습니다. 가입이 중간에 끊겼거나 규칙이 막고 있을 수 있습니다.';
-    S.mode=null; render(); return; }
-  S.me={uid:user.uid,...p.data()}; S.uid=user.uid;
+
+  S.me={uid:user.uid,...profile}; S.uid=user.uid;
   const sc=await getDoc(doc(FB.db,'schools',S.me.schoolId));
   S.school={id:S.me.schoolId,...(sc.data()||{name:''})};
   if(!S.school.currentYear) S.school.currentYear=schoolYear();
