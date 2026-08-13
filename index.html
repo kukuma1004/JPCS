@@ -344,7 +344,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.12.0914"></script>
+<script src="skills.js?v=2026.08.13.1216"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -397,7 +397,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.12.0914';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.13.1216';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -1018,9 +1018,12 @@ async function applyWorkbook(parsed){
 }
 
 /* ───────────── AI ───────────── */
-async function callClaude(system,user,maxTokens){
+/* 요즘 모델은 답을 쓰기 전에 속으로 추론을 하는데, 그 추론도 출력 토큰을 씁니다.
+   예산이 빠듯하면 추론에 다 쓰고 본문이 중간에 잘립니다.
+   그래서 넉넉히 잡고, 그래도 잘리면 두 배로 한 번 더 시도합니다. */
+async function callClaude(system,user,maxTokens,_retry){
   const p=settings.provider, key=settings.key(p), model=settings.modelOf(p);
-  const max=maxTokens||2000;
+  const max=maxTokens||4000;
   if(!key){ const e=new Error(`${PROVIDERS[p].name} API 키가 없습니다. 설정 화면에서 등록해주세요.`); e.nokey=true; throw e; }
 
   let url,opt;
@@ -1055,12 +1058,22 @@ async function callClaude(system,user,maxTokens){
   }
 
   const j=await r.json();
-  let out='';
-  if(p==='claude') out=(j.content||[]).map(c=>c.text||'').join('');
-  else if(p==='gemini') out=(j.candidates?.[0]?.content?.parts||[]).map(c=>c.text||'').join('');
-  else out=j.choices?.[0]?.message?.content||'';
+  let out='', cut=false;
+  if(p==='claude'){ out=(j.content||[]).map(c=>c.text||'').join('');
+    cut = j.stop_reason==='max_tokens'; }
+  else if(p==='gemini'){ const c0=j.candidates?.[0];
+    out=(c0?.content?.parts||[]).map(c=>c.text||'').join('');
+    cut = c0?.finishReason==='MAX_TOKENS'; }
+  else { const c0=j.choices?.[0]; out=c0?.message?.content||'';
+    cut = c0?.finish_reason==='length'; }
   out=String(out).trim();
-  if(!out) throw new Error('빈 응답이 왔습니다. 모델 이름을 확인하거나 다시 시도해주세요.');
+
+  // 잘렸거나 비었으면 예산을 두 배로 늘려 한 번 더
+  if((cut || !out) && !_retry) return callClaude(system,user,max*2,true);
+
+  if(!out) throw new Error(`${PROVIDERS[p].name}가 빈 응답을 보냈습니다. 모델이 생각에만 토큰을 다 썼을 수 있습니다. 다른 모델로 바꿔보세요.`);
+  if(cut){ const e=new Error('답변이 중간에 끊겼습니다. 모델을 바꾸거나 잠시 후 다시 시도해주세요.');
+    e.partial=out; throw e; }
   return out;
 }
 function studentBlock(id,areaKey,anon){
@@ -1077,13 +1090,13 @@ async function genRecord(id,areaKey){
   if(!block) throw new Error('입력된 내용이 없습니다. 먼저 항목을 채워주세요.');
   const a=AREAS[areaKey];
   const sys=window.GS_RULES.system(areaKey);
-  const out=await callClaude(sys,`아래 학생의 ${a.name} 특기사항을 작성해줘.\n\n${block}`,2500);
+  const out=await callClaude(sys,`아래 학생의 ${a.name} 특기사항을 작성해줘.\n\n${block}`,6000);
   return out.split(/\n\s*---/)[0].trim();
 }
-async function genReportText(id){
+async function genReportText(id,days){
   const s=student(id);
   const out=await callClaude(window.GS_RULES.REPORT,
-    `아래는 ${settings.anon?scode(s):s.name} 학생의 기록이다. 담임 코멘트와 앞으로의 학습 방향을 만들어줘.\n\n${briefContext(id,false)}`,1800);
+    `아래는 ${settings.anon?scode(s):s.name} 학생의 기록이다. 담임 코멘트와 앞으로의 학습 방향을 만들어줘.\n\n${briefContext(id,false,days)}`,6000);
   const c=out.split(/\[담임 코멘트\]/)[1]||out;
   const [comment,advice]=c.split(/\[앞으로의 학습 방향\]/);
   return { comment:(comment||'').trim(),
@@ -1093,11 +1106,12 @@ async function genBriefing(id){
   const s=student(id);
   const ctx=briefContext(id,true);   // 상담 브리핑은 교사만 봅니다
   const out=await callClaude(window.GS_RULES.BRIEFING,
-    `아래는 ${settings.anon?scode(s):s.name} 학생의 최근 기록이다. 상담 브리핑을 만들어줘.\n\n${ctx}`,1500);
+    `아래는 ${settings.anon?scode(s):s.name} 학생의 최근 기록이다. 상담 브리핑을 만들어줘.\n\n${ctx}`,5000);
   return out;
 }
-function briefContext(id,includeSensitive){
-  const js=jrn({studentId:id}).slice(0,28);
+function briefContext(id,includeSensitive,days){
+  const N=Number(days)||28, from=addDays(today(),-(N-1));
+  const js=jrn({studentId:id}).filter(j=>j.date>=from);
   const w1=js.filter(j=>j.date>=addDays(today(),-6)), w2=js.filter(j=>j.date<addDays(today(),-6)&&j.date>=addDays(today(),-13));
   const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y.totalMinutes,0)/a.length):0;
   const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
@@ -1110,12 +1124,19 @@ function briefContext(id,includeSensitive){
   const focAvg=focs.length?(focs.reduce((a,b)=>a+Number(b.focus),0)/focs.length).toFixed(1):null;
   const goods=js.filter(j=>j.good).slice(0,8).map(j=>`${j.date} ${j.good}`);
   const hards=js.filter(j=>j.hard).slice(0,8).map(j=>`${j.date} ${j.hard}`);
-  const cs=couns(id).slice(0,3).map(c=>`${c.date} [${c.kind}] ${c.summary}${c.promise?` / 약속: ${c.promise}`:''}`);
+  // 상담도 같은 기간 것을 먼저 보고, 그 앞 것은 한 건만 배경으로 붙입니다
+  const all=couns(id);
+  const inP=all.filter(c=>c.date>=from);
+  const before=all.filter(c=>c.date<from).slice(0,1);
+  const fmt=c=>`${c.date} [${c.kind}] ${c.summary}`
+    +(c.promise?` / 약속: ${c.promise}`:'')+(c.next?` / 다음 확인: ${c.next}`:'');
+  const cs=[...inP.map(fmt), ...before.map(c=>'(기간 이전) '+fmt(c))];
   const acts=AREA_KEYS.map(k=>{ const r=recs({studentId:id,area:k})[0];
     if(!r||!Object.values(r.fields||{}).some(v=>String(v||'').trim())) return null;
     return `${AREAS[k].name}: ${Object.values(r.fields).filter(Boolean).join(' ').slice(0,200)}`;}).filter(Boolean);
   return [
-    `[기록 기간] 최근 ${js.length}일치 학습일지`,
+    `[기록 기간] ${from} ~ ${today()} (${N}일). 이 기간 안의 기록만 아래에 담겨 있습니다.`,
+    `[학습일지 작성] ${N}일 중 ${js.length}일 작성`,
     `[공부시간] 이번주 일평균 ${hm(avg(w1))} (기록 ${w1.length}일) / 지난주 일평균 ${hm(avg(w2))} (기록 ${w2.length}일)`,
     `[과목별 누적] ${Object.entries(bySub).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${hm(v)}`).join(', ')||'없음'}`,
     `[어려워한 내용]\n${diffs.length?diffs.map(d=>'- '+d).join('\n'):'- 없음'}`,
@@ -2573,7 +2594,7 @@ function handle(act,el){
     await DB.put('briefs',{...brief(S.sel),id:S.sel,reportNote:$('#rnote').value.trim(),
       advice:$('#radvice').value.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)});
     toast('저장했습니다'); render(); }); },
-  genreport(){ busy(el,async()=>{ const r=await genReportText(S.sel);
+  genreport(){ busy(el,async()=>{ const r=await genReportText(S.sel,Number(S.filter.rdays||28));
     await DB.put('briefs',{...brief(S.sel),id:S.sel,reportNote:r.comment,advice:r.advice});
     toast('코멘트와 학습 방향을 만들었습니다. 내용을 확인하고 고쳐주세요',4000); render(); }); },
   mkshare(){ busy(el,async()=>{
@@ -2818,7 +2839,7 @@ function handle(act,el){
     box.innerHTML='<div class="small muted">확인 중…</div>';
     try{
       const t0=Date.now();
-      const out=await callClaude('한국어로만 답한다. 다른 말은 붙이지 않는다.','연결 확인이라고만 답해줘.',60);
+      const out=await callClaude('한국어로만 답한다. 다른 말은 붙이지 않는다.','연결 확인이라고만 답해줘.',2000);
       box.innerHTML=`<div class="card" style="border-color:#c8ddd5;background:var(--accent-wash);box-shadow:none">
         <div class="card-b small" style="padding:11px 13px">
           <b>${esc(PROVIDERS[p].name)} 연결 정상</b> · ${esc(settings.modelOf(p))} · ${((Date.now()-t0)/1000).toFixed(1)}초
