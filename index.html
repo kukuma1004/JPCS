@@ -344,7 +344,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.13.1216"></script>
+<script src="skills.js?v=2026.08.18.1148"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -397,7 +397,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.13.1216';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.18.1148';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -412,11 +412,10 @@ const PROVIDERS = {
             ['claude-haiku-4-5-20251001','빠르고 저렴, 초안용']] },
   gemini:{ name:'Gemini', short:'Google',
     keyUrl:'https://aistudio.google.com/apikey', keyHint:'AIza 로 시작',
-    def:'gemini-3.5-flash',
-    models:[['gemini-3.5-flash','균형, 기본 추천'],
-            ['gemini-3.6-flash','토큰 효율 개선판'],
-            ['gemini-3.5-flash-lite','가장 저렴, 대량 처리용'],
-            ['gemini-3.1-pro-preview','가장 정교 (프리뷰)']] },
+    def:'gemini-3.7-flash',
+    models:[['gemini-3.7-flash','최신, 기본 추천'],
+            ['gemini-3.6-flash','안정적, 비용 낮음'],
+            ['gemini-3.5-flash-lite','가장 저렴, 대량 처리용']] },
   openai:{ name:'GPT', short:'OpenAI',
     keyUrl:'https://platform.openai.com/api-keys', keyHint:'sk- 로 시작',
     def:'gpt-5.6-terra',
@@ -527,6 +526,9 @@ const dstr = d => { const x=d?new Date(d):new Date();
   return `${x.getFullYear()}-${p(x.getMonth()+1)}-${p(x.getDate())}`; };
 const today = () => dstr();
 const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return dstr(x); };
+// 그 날짜가 속한 주의 월요일 (주간 기록의 기준 날짜)
+const wk = d => { const x=new Date(d||new Date()); const off=(x.getDay()+6)%7;
+  x.setDate(x.getDate()-off); return dstr(x); };
 const hm = m => m>=60 ? `${Math.floor(m/60)}시간 ${m%60?m%60+'분':''}`.trim() : `${m||0}분`;
 const sentCount = t => (String(t||'').match(/[.!?](\s|$)/g)||[]).length;
 const kdate = d => { const x=new Date(d); return `${x.getMonth()+1}/${x.getDate()}(${'일월화수목금토'[x.getDay()]})`; };
@@ -1021,7 +1023,7 @@ async function applyWorkbook(parsed){
 /* 요즘 모델은 답을 쓰기 전에 속으로 추론을 하는데, 그 추론도 출력 토큰을 씁니다.
    예산이 빠듯하면 추론에 다 쓰고 본문이 중간에 잘립니다.
    그래서 넉넉히 잡고, 그래도 잘리면 두 배로 한 번 더 시도합니다. */
-async function callClaude(system,user,maxTokens,_retry){
+async function callClaude(system,user,maxTokens,_retry,_noThink){
   const p=settings.provider, key=settings.key(p), model=settings.modelOf(p);
   const max=maxTokens||4000;
   if(!key){ const e=new Error(`${PROVIDERS[p].name} API 키가 없습니다. 설정 화면에서 등록해주세요.`); e.nokey=true; throw e; }
@@ -1034,10 +1036,14 @@ async function callClaude(system,user,maxTokens,_retry){
       body:JSON.stringify({model,max_tokens:max,system,messages:[{role:'user',content:user}]})};
   } else if(p==='gemini'){
     url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+    // 생기부 문안은 긴 추론이 필요한 작업이 아닙니다.
+    // 생각 수준을 낮춰 출력 토큰을 본문에 쓰게 합니다. (지원 안 하는 모델이면 아래에서 다시 시도)
+    const gcfg={maxOutputTokens:max,temperature:1};
+    if(!_noThink) gcfg.thinkingConfig={thinkingLevel:'low'};
     opt={method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({systemInstruction:{parts:[{text:system}]},
         contents:[{role:'user',parts:[{text:user}]}],
-        generationConfig:{maxOutputTokens:max,temperature:1}})};
+        generationConfig:gcfg})};
   } else {
     url='https://api.openai.com/v1/chat/completions';
     opt={method:'POST',headers:{'content-type':'application/json','authorization':'Bearer '+key},
@@ -1051,6 +1057,9 @@ async function callClaude(system,user,maxTokens,_retry){
 
   if(!r.ok){
     let m=r.statusText; try{ const j=await r.json(); m=j.error?.message||j.error?.status||m; }catch(e){}
+    // 생각 수준 설정을 못 알아듣는 모델이면 그것만 빼고 다시
+    if(p==='gemini' && !_noThink && /thinking|Unknown name|Invalid JSON payload/i.test(m))
+      return callClaude(system,user,max,_retry,true);
     if(r.status===401||r.status===403) m=`${PROVIDERS[p].name} API 키가 올바르지 않거나 권한이 없습니다.`;
     if(r.status===404) m=`모델 이름 "${model}" 을 찾을 수 없습니다. 설정에서 모델 이름을 확인해주세요.`;
     if(r.status===429) m='요청이 몰렸습니다. 잠시 후 다시 시도하거나 사용량 한도를 확인해주세요.';
@@ -1069,7 +1078,7 @@ async function callClaude(system,user,maxTokens,_retry){
   out=String(out).trim();
 
   // 잘렸거나 비었으면 예산을 두 배로 늘려 한 번 더
-  if((cut || !out) && !_retry) return callClaude(system,user,max*2,true);
+  if((cut || !out) && !_retry) return callClaude(system,user,max*2,true,_noThink);
 
   if(!out) throw new Error(`${PROVIDERS[p].name}가 빈 응답을 보냈습니다. 모델이 생각에만 토큰을 다 썼을 수 있습니다. 다른 모델로 바꿔보세요.`);
   if(cut){ const e=new Error('답변이 중간에 끊겼습니다. 모델을 바꾸거나 잠시 후 다시 시도해주세요.');
@@ -1531,8 +1540,12 @@ function viewDash(){
   const scoped=new Set(st.map(x=>x.id));
   const recent=C.journals.filter(j=>j.date>=addDays(today(),-6)&&inYear(j.date)&&scoped.has(j.studentId));
   const avg=recent.length?Math.round(recent.reduce((a,b)=>a+b.totalMinutes,0)/recent.length):0;
-  const wrote=new Set(C.journals.filter(j=>j.date===today()&&scoped.has(j.studentId)).map(j=>j.studentId));
-  const missing=st.filter(s=>!wrote.has(s.id));
+  // 주간 모드 학생은 "이번 주에 썼는가"로 봅니다
+  const thisWeek=wk(today());
+  const wroteD=new Set(C.journals.filter(j=>j.date===today()&&j.type!=='weekly').map(j=>j.studentId));
+  const wroteW=new Set(C.journals.filter(j=>j.type==='weekly'&&j.date===thisWeek).map(j=>j.studentId));
+  const wrote=new Set([...wroteD,...wroteW].filter(id=>scoped.has(id)));
+  const missing=st.filter(s=>s.logMode==='weekly' ? !wroteW.has(s.id) : !wroteD.has(s.id));
   const totalCells=st.length*AREA_KEYS.length,
     doneCells=C.records.filter(r=>r.status==='done'&&scoped.has(r.studentId)&&Number(r.year||curYear())===curYear()).length;
   const series=[]; for(let i=6;i>=0;i--){const d=addDays(today(),-i),day=C.journals.filter(j=>j.date===d&&scoped.has(j.studentId));
@@ -1547,7 +1560,7 @@ function viewDash(){
   return `${topbar('대시보드',`${kfull(today())} · 학생 ${st.length}명`)}
   <div class="wrap">
     <div class="grid g4 keep mb">
-      ${stat(`${st.length-missing.length}<span style="font-size:15px;color:var(--muted)">/${st.length}</span>`,'오늘 학습일지 작성',
+      ${stat(`${st.length-missing.length}<span style="font-size:15px;color:var(--muted)">/${st.length}</span>`,'학습일지 작성 (오늘·이번 주)',
         missing.length?`<span class="tag warn">미작성 ${missing.length}명</span>`:'<span class="tag on">전원 작성</span>')}
       ${stat(hm(avg),'최근 7일 1인 평균',`<span class="muted tiny">기록 ${recent.length}건</span>`)}
       ${stat(`${doneCells}<span style="font-size:15px;color:var(--muted)">/${totalCells}</span>`,'기록 작성 완료',
@@ -1579,10 +1592,10 @@ function viewDash(){
     <div class="grid g2 mb">
       <div class="card"><div class="card-h"><h3>반 평균 공부시간</h3><span class="sub">최근 7일</span></div>
         <div class="card-b">${lineChart(series)}</div></div>
-      <div class="card"><div class="card-h"><h3>오늘 학습일지 미작성</h3><span class="sub" style="margin-left:auto">${missing.length}명</span></div>
+      <div class="card"><div class="card-h"><h3>학습일지 미작성</h3><span class="sub" style="margin-left:auto">${missing.length}명</span></div>
         <div class="card-b">${missing.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${missing.map(s=>
           `<button class="tag warn" data-act="open" data-id="${s.id}" style="cursor:pointer">${esc(s.name)}</button>`).join('')}</div>`
-          :`<div class="empty"><b>전원 작성 완료</b>오늘은 모두 학습일지를 남겼습니다.</div>`}</div></div>
+          :`<div class="empty"><b>전원 작성 완료</b>매일 모드는 오늘, 주간 모드는 이번 주 기준입니다.</div>`}</div></div>
     </div>
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>학생들이 어려워하는 과목</h3><span class="sub">최근 7일 언급</span></div>
@@ -1744,17 +1757,26 @@ function recordForm(s,areaKey){
 
 /* ── 학습일지 패널 ── */
 function panelJournal(s){
-  const js=jrn({studentId:s.id}).filter(j=>inYear(j.date)), last=js.filter(j=>j.date>=addDays(today(),-13));
-  const series=[]; for(let i=13;i>=0;i--){const d=addDays(today(),-i),j=js.find(x=>x.date===d);
-    series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});}
+  const js=jrn({studentId:s.id}).filter(j=>inYear(j.date));
+  const weekly=s.logMode==='weekly'||js.some(j=>j.type==='weekly');
+  const last=js.filter(j=>j.date>=addDays(today(),weekly?-55:-13));
+  const series=[];
+  if(weekly){ for(let i=7;i>=0;i--){ const w0=addDays(wk(today()),-7*i);
+      const inw=js.filter(x=>x.type==='weekly'? x.date===w0 : (x.date>=w0&&x.date<=addDays(w0,6)));
+      series.push({label:kdate(w0).slice(0,-3),value:inw.reduce((a,b)=>a+(b.totalMinutes||0),0)}); } }
+  else { for(let i=13;i>=0;i--){const d=addDays(today(),-i),j=js.find(x=>x.date===d);
+      series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});} }
   const bySub={}; last.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const diffs=last.flatMap(j=>(j.difficult||[]).map(d=>({...d,date:j.date})));
   const seeds=js.filter(j=>j.seed);
   return `<div class="grid g2 mb" style="grid-template-columns:1.3fr 1fr;align-items:start">
-    <div class="card"><div class="card-h"><h3>공부시간 추이</h3><span class="sub">최근 14일</span></div>
+    <div class="card"><div class="card-h"><h3>공부시간 추이</h3>
+      <span class="sub">${weekly?'주별 · 최근 8주':'최근 14일'}</span>
+      ${weekly?'<span class="tag" style="margin-left:auto">주간 기록 학생</span>':''}</div>
       <div class="card-b">${barChart(series)}
-      <div class="row mt small"><span class="muted">14일 합계</span><b class="mono">${hm(last.reduce((a,b)=>a+b.totalMinutes,0))}</b>
-      <span class="muted" style="margin-left:auto">기록 ${last.length}/14일</span></div></div></div>
+      <div class="row mt small"><span class="muted">${weekly?'8주':'14일'} 합계</span>
+      <b class="mono">${hm(last.reduce((a,b)=>a+(b.totalMinutes||0),0))}</b>
+      <span class="muted" style="margin-left:auto">기록 ${last.length}${weekly?'주':'/14일'}</span></div></div></div>
     <div class="card"><div class="card-h"><h3>과목별 배분</h3></div>
       <div class="card-b">${Object.keys(bySub).length?barList(Object.entries(bySub).sort((a,b)=>b[1]-a[1]),hm):'<div class="empty">기록 없음</div>'}</div></div></div>
   ${(()=>{ const moods=last.filter(j=>j.mood).map(j=>({date:j.date,mood:Number(j.mood)}));
@@ -1798,6 +1820,8 @@ function panelJournal(s){
 /* ── 상담 패널 ── */
 function panelCounsel(s){
   const list=couns(s.id);
+  const cd=Number(S.filter.cdays)||0;
+  const shown=cd? list.filter(c=>c.date>=addDays(today(),-(cd-1))) : list;
   const bf=brief(s.id).briefing;
   return `<div class="grid g2" style="grid-template-columns:1fr 1.05fr;align-items:start">
     <div>
@@ -1819,14 +1843,20 @@ function panelCounsel(s){
           <button type="button" class="btn pri wide" data-act="savecounsel">상담 기록 저장</button>
         </div></form></div>
     </div>
-    <div class="card"><div class="card-h"><h3>상담 이력</h3><span class="sub">${list.length}건</span></div>
-      <div class="card-b">${list.length?list.map(c=>`<div class="jlog">
+    <div class="card"><div class="card-h"><h3>상담 이력</h3>
+      <span class="sub">${shown.length}건${cd?` / 전체 ${list.length}건`:''}</span>
+      <select data-act="cdays" style="width:auto;font-size:14px;margin-left:auto">
+        <option value="">전체 기간</option>
+        ${[30,90,180,365].map(n=>`<option value="${n}" ${cd===n?'selected':''}>최근 ${n>=365?'1년':n+'일'}</option>`).join('')}
+      </select></div>
+      <div class="card-b">${shown.length?shown.map(c=>`<div class="jlog">
         <div class="spread"><span class="row" style="gap:6px"><b class="small">${kfull(c.date)}</b><span class="tag">${esc(c.kind)}</span></span>
           <button class="iconbtn" data-act="delcounsel" data-id="${c.id}" style="width:24px;height:24px">×</button></div>
         <div class="small mt-s wrapline">${esc(c.summary)}</div>
         ${c.promise?`<div class="small mt-s" style="color:var(--accent-ink)">약속 · ${esc(c.promise)}</div>`:''}
         ${c.next?`<div class="tiny mt-s" style="color:var(--warn)">다음 확인 · ${esc(c.next)}</div>`:''}
-      </div>`).join(''):'<div class="empty"><b>상담 기록이 없습니다</b>왼쪽에서 첫 기록을 남겨보세요.</div>'}</div></div>
+      </div>`).join(''):`<div class="empty"><b>${cd?`최근 ${cd>=365?'1년':cd+'일'} 안에 상담 기록이 없습니다`:'상담 기록이 없습니다'}</b>
+        ${cd&&list.length?'기간을 전체로 바꾸면 지난 기록을 볼 수 있습니다.':'왼쪽에서 첫 기록을 남겨보세요.'}</div>`}</div></div>
   </div>`;
 }
 
@@ -2252,7 +2282,8 @@ function shellStudent(){
   return `<div class="shell">
     <aside class="side">
       <div class="brand"><div class="brand-mark">기</div><div><b>기록실</b><small>${esc(s.name)} · ${scode(s)}</small></div></div>
-      <div class="navgroup"><span>학습일지</span>${nav('write','오늘 일지 쓰기','✎')}${nav('mine','내 기록 보기','◧')}</div>
+      <div class="navgroup"><span>학습일지</span>
+        ${nav('write',s.logMode==='weekly'?'이번 주 쓰기':'오늘 일지 쓰기','✎')}${nav('mine','내 기록 보기','◧')}</div>
       ${S.mode==='demo'?`<div class="navgroup"><span>데모</span>
         <label class="f" style="margin:0 0 8px"><span style="font-size:12.5px">보고 있는 학생</span>
           <select data-act="demopick" style="font-size:14px">
@@ -2262,11 +2293,77 @@ function shellStudent(){
       </div>`:''}
       <div class="side-foot"><button class="btn ghost sm" data-act="logout">나가기</button></div>
     </aside>
-    <main class="main">${S.mode==='demo'?demoBanner('student'):''}${S.view==='mine'?studentMine(s):studentWrite(s)}</main>
+    <main class="main">${S.mode==='demo'?demoBanner('student'):''}${
+      S.view==='mine' ? studentMine(s)
+      : (s.logMode==='weekly' ? studentWeek(s) : studentWrite(s))}</main>
     <nav class="mob">
-      <button class="${S.view!=='mine'?'on':''}" data-act="nav" data-v="write"><i>✎</i>일지 쓰기</button>
+      <button class="${S.view!=='mine'?'on':''}" data-act="nav" data-v="write"><i>✎</i>${s.logMode==='weekly'?'주간 쓰기':'일지 쓰기'}</button>
       <button class="${S.view==='mine'?'on':''}" data-act="nav" data-v="mine"><i>◧</i>내 기록</button></nav></div>`;
 }
+/* 주간 기록 — 매일 쓰기가 버거운 학생용.
+   한 주를 통째로 한 번에 적습니다. 월요일 날짜로 저장하고 type='weekly' 로 구분합니다. */
+function studentWeek(s){
+  const wkStart=S.filter.week||wk(today());
+  const wkEnd=addDays(wkStart,6);
+  const j=C.journals.find(x=>x.studentId===s.id&&x.date===wkStart&&x.type==='weekly')
+    ||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',days:0};
+  const tot=(j.subjects||[]).reduce((a,b)=>a+(Number(b.minutes)||0),0);
+  const weeks=[]; for(let i=0;i<8;i++) weeks.push(addDays(wk(today()),-7*i));
+  return `${topbar('이번 주 학습일지', j.id?'이미 쓴 주입니다. 고치고 저장하면 덮어써집니다.':'한 주를 한 번에 기록합니다',
+    `<select data-act="setweek" style="width:auto">
+      ${weeks.map(x=>`<option value="${x}" ${x===wkStart?'selected':''}>${kdate(x)} ~ ${kdate(addDays(x,6))}${x===wk(today())?' (이번 주)':''}</option>`).join('')}
+     </select>
+     <button class="btn sm" data-act="setmode" data-v="daily">매일 쓰기로</button>`)}
+  <div class="wrap" style="max-width:700px">
+    ${j.id?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash);box-shadow:none">
+      <div class="card-b small" style="padding:11px 15px"><b>작성 완료</b> · 고치고 저장하면 덮어써집니다.</div></div>`:''}
+    <form id="jform"><div class="card"><div class="card-b">
+      <div class="spread mb"><h3 style="font-size:15px">이번 주에 무엇을 공부했나요?</h3>
+        <span class="tag ${tot?'on':''}">합계 ${hm(tot)}</span></div>
+      <div class="tiny muted mb-s">한 주 동안의 <b>총 시간</b>을 과목군별로 적어주세요.</div>
+      <div id="subs">${(j.subjects.length?j.subjects:[{name:'',minutes:''}]).map(x=>subRow(x)).join('')}</div>
+      <button type="button" class="btn sm" data-act="addsub">+ 과목 추가</button>
+
+      <label class="f mt"><span>공부한 날 <em>7일 중 며칠</em></span>
+        <div class="moodrow" style="grid-template-columns:repeat(8,1fr)">
+          ${[0,1,2,3,4,5,6,7].map(d=>`<button type="button" class="moodbtn ${Number(j.days)===d?'on':''}"
+            data-act="setdays" data-v="${d}">${d}</button>`).join('')}
+        </div>
+        <input type="hidden" name="days" id="daysval" value="${Number(j.days)||0}"></label>
+
+      <div style="border-top:1px solid var(--line-2);margin:20px 0 16px"></div>
+      <div class="spread mb"><h3 style="font-size:15px">어려웠던 내용</h3>
+        <span class="tiny muted">선생님이 수업 보완에 참고합니다</span></div>
+      <div id="diffs">${(j.difficult||[]).map(x=>diffRow(x)).join('')}</div>
+      <button type="button" class="btn sm" data-act="adddiff">+ 어려웠던 내용 추가</button>
+
+      <label class="f mt"><span>더 알아보고 싶어진 것 <em>선택</em></span>
+        <textarea name="seed" rows="2" placeholder="공부하다 궁금해진 것을 적어두면 나중에 탐구활동으로 이어집니다.">${esc(j.seed||'')}</textarea></label>
+
+      <label class="f"><span>이번 주 공부 집중도 <em>선택</em></span>
+        <div class="moodrow" id="focusrow">
+          ${FOCUS.map(([v,l])=>`<button type="button" class="moodbtn ${Number(j.focus)===v?'on':''}"
+            data-act="setfocus" data-v="${v}">${l}</button>`).join('')}</div>
+        <input type="hidden" name="focus" id="focusval" value="${Number(j.focus)||0}"></label>
+
+      <div style="border-top:1px solid var(--line-2);margin:22px 0 16px"></div>
+      <div class="spread mb"><h3 style="font-size:15px">이번 주 학교생활은 어땠나요?</h3>
+        <span class="tiny muted">전부 선택입니다</span></div>
+      <label class="f"><span>이번 주 컨디션</span>
+        <div class="moodrow" id="moodrow">
+          ${MOODS.map(([v,l])=>`<button type="button" class="moodbtn ${Number(j.mood)===v?'on':''}"
+            data-act="setmood" data-v="${v}">${l}</button>`).join('')}</div>
+        <input type="hidden" name="mood" id="moodval" value="${Number(j.mood)||0}"></label>
+      <label class="f"><span>좋았던 일 · 잘한 일</span>
+        <textarea name="good" rows="2" placeholder="작은 것도 괜찮습니다.">${esc(j.good||'')}</textarea></label>
+      <label class="f"><span>힘들었던 일 <em>선생님만 봅니다</em></span>
+        <textarea name="hard" rows="2" placeholder="공부, 친구 관계, 몸 상태, 무엇이든 괜찮습니다.">${esc(j.hard||'')}</textarea></label>
+      <label class="f" style="margin-bottom:8px"><span>이번 주 한 줄 <em>선택</em></span>
+        <textarea name="memo" rows="2" placeholder="이번 주를 한 문장으로">${esc(j.memo||'')}</textarea></label>
+      <button type="button" class="btn pri wide mt" data-act="saveweek">${j.id?'수정 저장':'주간 일지 저장'}</button>
+    </div></div></form></div>`;
+}
+
 function studentWrite(s){
   const date=S.filter.date||today();
   const j=jrn({studentId:s.id}).find(x=>x.date===date)||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:''};
@@ -2276,7 +2373,8 @@ function studentWrite(s){
   const isToday=date===today();
   return `${topbar(isToday?'오늘의 학습일지':`${kdate(date)} 학습일지`,
     j.id?'이미 쓴 일지입니다. 고치고 다시 저장하면 덮어써집니다.':'오늘 공부한 내용을 기록해보세요',
-    `<input type="date" value="${date}" data-act="setdate" style="width:auto" max="${today()}">`)}
+    `<input type="date" value="${date}" data-act="setdate" style="width:auto" max="${today()}">
+     <button class="btn sm" data-act="setmode" data-v="weekly">주간으로 쓰기</button>`)}
   <div class="wrap" style="max-width:700px">
     ${j.id?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash);box-shadow:none">
       <div class="card-b row" style="padding:11px 15px;gap:10px;flex-wrap:wrap">
@@ -2549,6 +2647,7 @@ function handle(act,el){
   tab(){ S.tab=el.dataset.t; render(); },
   days(){ S.filter.days=el.value; render(); },
   rdays(){ S.filter.rdays=el.value; render(); },
+  cdays(){ S.filter.cdays=el.value; render(); },
   exparea(){ S.area=el.dataset.a; render(); },
   setdate(){ S.filter.date=el.value; render(); },
   editj(){ S.view='write'; S.filter.date=el.dataset.d; render(); },
@@ -2647,6 +2746,18 @@ function handle(act,el){
   setfocus(){ const v=el.dataset.v;
     $('#focusval').value = $('#focusval').value===v ? '0' : v;
     $$('#focusrow .moodbtn').forEach(b=>b.classList.toggle('on', b.dataset.v===$('#focusval').value)); },
+  setmode(){ busy(el,async()=>{ const s=student(S.me.studentId); if(!s) return;
+    const v=el.dataset.v;
+    await DB.put('students',{...s,logMode:v});
+    S.filter.week=null; S.filter.date=null;
+    toast(v==='weekly'?'주간 기록 모드로 바꿨습니다. 한 주를 한 번에 적으면 됩니다.'
+                      :'매일 기록 모드로 바꿨습니다.',4000);
+    render(); }); },
+  setweek(){ S.filter.week=el.value; render(); },
+  setdays(){ const v=el.dataset.v;
+    $('#daysval').value=v;
+    $$('[data-act=setdays]').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); },
+  saveweek(){ busy(el,saveWeek); },
   setmood(){ const v=el.dataset.v;
     $('#moodval').value = $('#moodval').value===v ? '0' : v;   // 다시 누르면 해제
     $$('#moodrow .moodbtn').forEach(b=>b.classList.toggle('on', b.dataset.v===$('#moodval').value)); },
@@ -3049,6 +3160,30 @@ async function saveRecord(){
   obj.target=Number(obj.target)||a.bytes;
   await DB.put('records',obj);
 }
+async function saveWeek(){
+  const s=student(S.me.studentId), wkStart=S.filter.week||wk(today());
+  const subs=$$('#subs .subrow').map(r=>{
+    const h=Number(r.querySelector('.jsub-h').value)||0, mm=Number(r.querySelector('.jsub-mm').value)||0;
+    const g=r.querySelector('.jsub-g').value, nm=r.querySelector('.jsub-n').value.trim();
+    return {group:g, name:nm||g, minutes:h*60+mm};
+  }).filter(x=>x.group&&x.minutes>0);
+  const difficult=$$('#diffs .diffrow').map(r=>({subject:r.querySelector('.jdif-s').value.trim(),
+    content:r.querySelector('.jdif-c').value.trim()})).filter(x=>x.content);
+  const days=Number($('#daysval')?.value)||0;
+  const any = subs.length||days||Number($('#moodval')?.value)||Number($('#focusval')?.value)
+    ||$('[name=good]')?.value.trim()||$('[name=hard]')?.value.trim()||$('[name=memo]')?.value.trim();
+  if(!any){ toast('공부 기록이나 학교생활 내용 중 하나는 채워주세요'); return; }
+  const same=C.journals.filter(x=>x.studentId===s.id&&x.date===wkStart&&x.type==='weekly')
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  for(const extra of same.slice(1)) await DB.del('journals',extra.id);
+  await DB.put('journals',{id:same[0]?.id,studentId:s.id,date:wkStart,type:'weekly',
+    subjects:subs,totalMinutes:subs.reduce((a,b)=>a+b.minutes,0),days,difficult,
+    memo:$('[name=memo]').value.trim(),seed:$('[name=seed]').value.trim(),
+    mood:Number($('#moodval')?.value)||0, focus:Number($('#focusval')?.value)||0,
+    good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||''});
+  toast('주간 일지를 저장했습니다'); S.view='mine'; S.filter.week=null; render();
+}
+
 async function saveJournal(){
   const s=student(S.me.studentId), date=S.filter.date||today();
   const subs=$$('#subs .subrow').map(r=>{
