@@ -397,7 +397,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.18.1148';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.18.1620';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -1113,7 +1113,7 @@ async function genReportText(id,days){
 }
 async function genBriefing(id){
   const s=student(id);
-  const ctx=briefContext(id,true);   // 상담 브리핑은 교사만 봅니다
+  const ctx=briefContext(id,true,rangeDays(rangeOf('r',28)));   // 상담 브리핑은 교사만 봅니다
   const out=await callClaude(window.GS_RULES.BRIEFING,
     `아래는 ${settings.anon?scode(s):s.name} 학생의 최근 기록이다. 상담 브리핑을 만들어줘.\n\n${ctx}`,5000);
   return out;
@@ -1820,8 +1820,8 @@ function panelJournal(s){
 /* ── 상담 패널 ── */
 function panelCounsel(s){
   const list=couns(s.id);
-  const cd=Number(S.filter.cdays)||0;
-  const shown=cd? list.filter(c=>c.date>=addDays(today(),-(cd-1))) : list;
+  const CR=rangeOf('c',0);
+  const shown=(CR.all&&!CR.custom)? list : list.filter(c=>c.date>=CR.from&&c.date<=CR.to);
   const bf=brief(s.id).briefing;
   return `<div class="grid g2" style="grid-template-columns:1fr 1.05fr;align-items:start">
     <div>
@@ -1843,32 +1843,37 @@ function panelCounsel(s){
           <button type="button" class="btn pri wide" data-act="savecounsel">상담 기록 저장</button>
         </div></form></div>
     </div>
+    <div>
+    ${rangeBox('c',[30,90,180,365],'상담 기간')}
     <div class="card"><div class="card-h"><h3>상담 이력</h3>
-      <span class="sub">${shown.length}건${cd?` / 전체 ${list.length}건`:''}</span>
-      <select data-act="cdays" style="width:auto;font-size:14px;margin-left:auto">
-        <option value="">전체 기간</option>
-        ${[30,90,180,365].map(n=>`<option value="${n}" ${cd===n?'selected':''}>최근 ${n>=365?'1년':n+'일'}</option>`).join('')}
-      </select></div>
+      <span class="sub">${shown.length}건${shown.length!==list.length?` / 전체 ${list.length}건`:''}</span></div>
       <div class="card-b">${shown.length?shown.map(c=>`<div class="jlog">
         <div class="spread"><span class="row" style="gap:6px"><b class="small">${kfull(c.date)}</b><span class="tag">${esc(c.kind)}</span></span>
           <button class="iconbtn" data-act="delcounsel" data-id="${c.id}" style="width:24px;height:24px">×</button></div>
         <div class="small mt-s wrapline">${esc(c.summary)}</div>
         ${c.promise?`<div class="small mt-s" style="color:var(--accent-ink)">약속 · ${esc(c.promise)}</div>`:''}
         ${c.next?`<div class="tiny mt-s" style="color:var(--warn)">다음 확인 · ${esc(c.next)}</div>`:''}
-      </div>`).join(''):`<div class="empty"><b>${cd?`최근 ${cd>=365?'1년':cd+'일'} 안에 상담 기록이 없습니다`:'상담 기록이 없습니다'}</b>
-        ${cd&&list.length?'기간을 전체로 바꾸면 지난 기록을 볼 수 있습니다.':'왼쪽에서 첫 기록을 남겨보세요.'}</div>`}</div></div>
+      </div>`).join(''):`<div class="empty"><b>이 기간에 상담 기록이 없습니다</b>
+        ${list.length?'기간을 전체로 바꾸면 지난 기록을 볼 수 있습니다.':'왼쪽에서 첫 기록을 남겨보세요.'}</div>`}</div></div></div>
   </div>`;
 }
 
 /* ── 리포트 패널 ── */
-function reportData(s,days){
-  const from=addDays(today(),-(days-1));
-  const js=jrn({studentId:s.id}).filter(j=>j.date>=from);
-  const series=[]; for(let i=days-1;i>=0;i--){const d=addDays(today(),-i),j=js.find(x=>x.date===d);
-    series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});}
+function reportData(s,R){
+  const from=R.from, to=R.to, days=rangeDays(R);
+  const js=jrn({studentId:s.id}).filter(j=>j.date>=from&&j.date<=to);
+  const series=[];
+  if(days>35){ // 기간이 길면 주 단위로 묶어 봅니다
+    for(let w0=wk(from); w0<=to; w0=addDays(w0,7)){
+      const inw=js.filter(x=>x.date>=w0&&x.date<=addDays(w0,6));
+      series.push({label:kdate(w0).slice(0,-3),value:inw.reduce((a,b)=>a+(b.totalMinutes||0),0)}); }
+  } else {
+    for(let i=days-1;i>=0;i--){const d=addDays(to,-i),j=js.find(x=>x.date===d);
+      series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});}
+  }
   const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const tot=js.reduce((a,b)=>a+b.totalMinutes,0);
-  return {from,to:today(),days,js,series,bySub,tot,
+  return {from,to,days,js,series,bySub,tot,
     avg:js.length?Math.round(tot/js.length):0,
     diffs:js.flatMap(j=>(j.difficult||[]).map(d=>({...d,date:j.date}))),
     seeds:js.filter(j=>j.seed).map(j=>({seed:j.seed,date:j.date})),
@@ -1879,12 +1884,47 @@ function reportData(s,days){
       const v=Object.values(r?.fields||{}).filter(x=>String(x||'').trim());
       return v.length?{name:AREAS[k].name,text:v.join(' ')}:null;}).filter(Boolean)};
 }
+/* 기간 고르개 — 프리셋으로 빠르게, 필요하면 날짜를 직접 지정합니다.
+   pre = 상태 키 접두사 (r=리포트, c=상담) */
+function rangeBox(pre,presets,label){
+  const from=S.filter[pre+'from']||'', to=S.filter[pre+'to']||'';
+  const days=Number(S.filter[pre+'days'])||0;
+  const custom=!!(from||to);
+  return `<div class="card mb noprint"><div class="card-b" style="padding:13px 15px">
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <span class="small" style="font-weight:600">${label}</span>
+      ${presets.map(n=>`<button class="btn sm ${!custom&&days===n?'pri':''}" data-act="${pre}preset" data-v="${n}">
+        ${n>=365?'1년':n>=30?Math.round(n/30)+'개월':n+'일'}</button>`).join('')}
+      ${pre==='c'?`<button class="btn sm ${!custom&&!days?'pri':''}" data-act="cpreset" data-v="0">전체</button>`:''}
+      <span class="row" style="gap:5px;margin-left:auto;flex-wrap:wrap">
+        <input type="date" data-act="${pre}from" value="${from}" style="width:auto" max="${today()}">
+        <span class="tiny muted">~</span>
+        <input type="date" data-act="${pre}to" value="${to}" style="width:auto" max="${today()}">
+        ${custom?`<button class="btn sm" data-act="${pre}clear">직접 지정 해제</button>`:''}
+      </span>
+    </div>
+    <div class="tiny muted mt-s">${custom
+      ? `직접 지정: ${from||'처음'} ~ ${to||today()}`
+      : '날짜를 직접 넣으면 그 기간이 우선합니다. 한쪽만 넣어도 됩니다.'}</div>
+  </div></div>`;
+}
+// 지금 고른 기간의 시작·끝 (직접 지정이 프리셋보다 우선)
+function rangeOf(pre,defDays){
+  const from=S.filter[pre+'from'], to=S.filter[pre+'to'];
+  if(from||to) return {from:from||'1900-01-01', to:to||today(), custom:true};
+  const d=Number(S.filter[pre+'days']);
+  if(pre==='c' && S.filter.cdays==='0') return {from:'1900-01-01', to:today(), custom:false, all:true};
+  const n=d||defDays;
+  return {from:addDays(today(),-(n-1)), to:today(), custom:false, days:n};
+}
+const rangeDays = r => Math.max(1, Math.round((new Date(r.to)-new Date(r.from))/86400000)+1);
+
 function panelReport(s){
-  const days=Number(S.filter.rdays||28);
-  const d=reportData(s,days);
+  const R=rangeOf('r',28), days=rangeDays(R);
+  const d=reportData(s,R);
   const b=brief(s.id), note=b.reportNote||'', advice=b.advice||[];
-  return `<div class="row mb noprint" style="flex-wrap:wrap">
-      <select data-act="rdays" style="width:auto">${[14,28,56,90].map(n=>`<option value="${n}" ${n===days?'selected':''}>최근 ${n}일</option>`).join('')}</select>
+  return `${rangeBox('r',[14,28,56,90],'리포트 기간')}
+    <div class="row mb noprint" style="flex-wrap:wrap">
       <button class="btn ai" data-act="genreport">✦ 코멘트·학습방향 생성</button>
       <button class="btn" data-act="print">인쇄 · PDF 저장</button>
       <button class="btn" data-act="mkshare">학부모 열람 링크 만들기</button>
@@ -2102,11 +2142,18 @@ function viewSettings(){
         <label class="f"><span>${P.name} API 키 <em>${P.keyHint}</em></span>
           <input type="password" id="apikey" value="${esc(settings.key(p))}" placeholder="${P.keyHint.split(' ')[0]}..." autocomplete="off"></label>
         <div class="tiny muted mb-s" style="margin-top:-8px">발급: <a href="${P.keyUrl}" target="_blank" rel="noopener">${P.keyUrl.replace('https://','')}</a></div>
-        <label class="f"><span>모델 <em>이름이 바뀌면 직접 고치셔도 됩니다</em></span>
-          <input type="text" id="model" value="${esc(settings.modelOf(p))}" list="modellist" spellcheck="false"></label>
-        <datalist id="modellist">${P.models.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</datalist>
-        <div class="tiny muted mb" style="margin-top:-8px;line-height:1.8">
-          ${P.models.map(([v,l])=>`<code>${v}</code> ${l}`).join('<br>')}</div>`; })()}
+        <label class="f"><span>모델</span>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            ${P.models.map(([v,l])=>`<button class="btn ${settings.modelOf(p)===v?'pri':''}" data-act="setmodel" data-v="${v}"
+              style="flex:1;min-width:150px;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 13px">
+              <span style="font-family:ui-monospace,monospace;font-size:13.5px">${v}</span>
+              <span style="font-weight:400;font-size:12.5px;opacity:.75">${l}</span></button>`).join('')}
+          </div></label>
+        <label class="f" style="margin-top:-4px"><span>직접 입력 <em>모델 이름이 바뀌었을 때</em></span>
+          <input type="text" id="model" value="${esc(settings.modelOf(p))}" spellcheck="false"
+            placeholder="${P.def}"></label>
+        <div class="tiny muted mb" style="margin-top:-8px">
+          위 버튼을 누르면 이 칸이 채워집니다. 저장을 눌러야 적용됩니다.</div>`; })()}
 
         <label class="row small mb" style="gap:7px;cursor:pointer">
           <input type="checkbox" id="anonset" style="width:auto" ${settings.anon?'checked':''}>
@@ -2646,8 +2693,14 @@ function handle(act,el){
   back(){ S.sel=null; render(); },
   tab(){ S.tab=el.dataset.t; render(); },
   days(){ S.filter.days=el.value; render(); },
-  rdays(){ S.filter.rdays=el.value; render(); },
-  cdays(){ S.filter.cdays=el.value; render(); },
+  rpreset(){ S.filter.rdays=el.dataset.v; S.filter.rfrom=''; S.filter.rto=''; render(); },
+  cpreset(){ S.filter.cdays=el.dataset.v; S.filter.cfrom=''; S.filter.cto=''; render(); },
+  rfrom(){ S.filter.rfrom=el.value; render(); },
+  rto(){ S.filter.rto=el.value; render(); },
+  cfrom(){ S.filter.cfrom=el.value; render(); },
+  cto(){ S.filter.cto=el.value; render(); },
+  rclear(){ S.filter.rfrom=''; S.filter.rto=''; render(); },
+  cclear(){ S.filter.cfrom=''; S.filter.cto=''; render(); },
   exparea(){ S.area=el.dataset.a; render(); },
   setdate(){ S.filter.date=el.value; render(); },
   editj(){ S.view='write'; S.filter.date=el.dataset.d; render(); },
@@ -2693,12 +2746,12 @@ function handle(act,el){
     await DB.put('briefs',{...brief(S.sel),id:S.sel,reportNote:$('#rnote').value.trim(),
       advice:$('#radvice').value.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean)});
     toast('저장했습니다'); render(); }); },
-  genreport(){ busy(el,async()=>{ const r=await genReportText(S.sel,Number(S.filter.rdays||28));
+  genreport(){ busy(el,async()=>{ const r=await genReportText(S.sel,rangeDays(rangeOf('r',28)));
     await DB.put('briefs',{...brief(S.sel),id:S.sel,reportNote:r.comment,advice:r.advice});
     toast('코멘트와 학습 방향을 만들었습니다. 내용을 확인하고 고쳐주세요',4000); render(); }); },
   mkshare(){ busy(el,async()=>{
     if(!DB.cloud) throw new Error('데모 모드에서는 공유 링크를 만들 수 없습니다.');
-    const s=student(S.sel), d=reportData(s,Number(S.filter.rdays||28));
+    const s=student(S.sel), d=reportData(s,rangeOf('r',28));
     const token=rid()+newCode(6).toLowerCase();
     const expires=addDays(today(),30);
     const {doc,setDoc}=FB.fs;
@@ -2932,6 +2985,10 @@ function handle(act,el){
   xlsapply(){ busy(el,async()=>{ const r=await applyWorkbook(window.__xls);
     toast(`${r.saved}건을 저장했습니다${r.missed.length?` (${r.missed.length}건 건너뜀)`:''}`,4000);
     window.__xls=null; render(); }); },
+  setmodel(){ const p=settings.provider;
+    if($('#apikey')) settings.setKey(p,$('#apikey').value.trim());
+    settings.setModel(p,el.dataset.v);
+    toast(`${el.dataset.v} 로 바꿨습니다`); render(); },
   setprov(){ const v=el.dataset.v;
     // 화면을 떠나기 전에 지금 입력한 값을 잃지 않도록 먼저 저장
     if($('#apikey')) settings.setKey(settings.provider,$('#apikey').value.trim());
