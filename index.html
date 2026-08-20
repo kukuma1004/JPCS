@@ -426,7 +426,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.20.1730';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.21.0910';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -2008,17 +2008,11 @@ function shellTeacher(){
         ${nav('settings','설정','⚙')}
         ${S.isHost?nav('host','호스트 콘솔','◆'):''}
       </div>
-      <div class="navgroup"><span>이 학년도 데이터</span>
-        <div class="tiny muted" style="line-height:1.85;padding:2px 4px 6px">
-          학생 ${st.length}명 · 학습일지 ${C.journals.filter(j=>inYear(j.date)).length}건
-          ${C.journals.length!==C.journals.filter(j=>inYear(j.date)).length
-            ? `<br><span style="color:var(--warn)">다른 학년도에 ${C.journals.length-C.journals.filter(j=>inYear(j.date)).length}건 더 있습니다</span>`:''}
-        </div></div>
-      ${areaKeys().length?`<div class="navgroup"><span>기록 진행</span>
-        ${areaKeys().map(k=>{const a=AREAS[k],d=recs({area:k}).filter(r=>r.status==='done'&&st.some(x=>x.id===r.studentId)).length;
-          return `<button class="nav" data-act="nav" data-v="students"><span class="pill" style="background:${a.hex}"></span>${a.short}
-            <span class="cnt">${d}/${st.length||0}</span></button>`;}).join('')}
-      </div>`:''}
+      ${(()=>{ // 다른 학년도에 기록이 남아 있을 때만 알립니다. 평소에는 자리를 차지하지 않습니다.
+        const inY=C.journals.filter(j=>inYear(j.date)).length, other=C.journals.length-inY;
+        return other>0?`<div class="navgroup"><span>확인</span>
+          <div class="tiny" style="line-height:1.85;padding:2px 4px 6px;color:var(--warn)">
+            다른 학년도에 학습일지 ${other}건이 더 있습니다</div></div>`:''; })()}
       <div class="side-foot">
         <div class="tiny mb-s">${esc(S.me?.name||'')} · ${S.me?.role==='admin'?'관리자':'교사'}</div>
         <div class="tiny muted mb-s" style="opacity:.8">버전 ${BUILD}
@@ -2087,9 +2081,10 @@ function viewDash(){
       ${stat(`${st.length-missing.length}<span style="font-size:15px;color:var(--muted)">/${st.length}</span>`,'학습일지 작성 (오늘·이번 주)',
         missing.length?`<span class="tag warn">미작성 ${missing.length}명</span>`:'<span class="tag on">전원 작성</span>')}
       ${stat(hm(avg),'최근 7일 1인 평균',`<span class="muted tiny">기록 ${recent.length}건</span>`)}
-      ${stat(`${doneCells}<span style="font-size:15px;color:var(--muted)">/${totalCells}</span>`,'기록 작성 완료',
+      ${stat(`${doneCells}<span style="font-size:15px;color:var(--muted)">/${totalCells}</span>`,
+        areaKeys().length===1?`${AREAS[areaKeys()[0]].name} 완료`:'생기부 기록 완료',
         `<span class="muted tiny">${Math.round(doneCells/totalCells*100)}% 진행</span>`)}
-      ${stat(recent.filter(j=>j.seed).length,'세특 소재 후보','<span class="muted tiny">학생이 남긴 궁금증</span>')}
+      ${stat(recent.filter(j=>j.seed).length,'학생이 남긴 궁금증','<span class="muted tiny">최근 7일 · 기록 소재가 됩니다</span>')}
     </div>
     ${praise.length?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash)">
       <div class="card-b"><b class="small" style="color:var(--accent-ink)">✦ 오늘 한마디 해주면 좋을 학생</b>
@@ -2153,15 +2148,16 @@ function viewDash(){
           :`<div class="empty" style="padding:16px 0"><b>전원 작성 완료</b>오늘 한 명도 빠지지 않았습니다.</div>`}
         </div></div>
     </div>
-    <div class="grid g2">
+    <div class="grid ${areaKeys().length>1?'g2':''}">
       <div class="card"><div class="card-h"><h3>학생들이 어려워하는 과목</h3><span class="sub">최근 7일 언급</span></div>
         <div class="card-b">${diffTop.length?barList(diffTop):'<div class="empty">아직 기록이 없습니다.</div>'}
         <button class="btn sm mt" data-act="nav" data-v="journal">전체 내용 보기 →</button></div></div>
-      <div class="card"><div class="card-h"><h3>영역별 기록 진행</h3></div>
+      ${areaKeys().length>1?`<div class="card"><div class="card-h"><h3>영역별 기록 진행</h3>
+        <button class="btn sm" data-act="nav" data-v="students" style="margin-left:auto">학생 목록 →</button></div>
         <div class="card-b">${areaKeys().map(k=>{const a=AREAS[k],d=recs({area:k}).filter(r=>r.status==='done').length,p=Math.round(d/st.length*100);
           return `<div style="margin-bottom:11px"><div class="spread tiny" style="margin-bottom:3px">
             <span><span class="pill" style="background:${a.hex}"></span> ${a.name}</span><span class="muted mono">${d}/${st.length}</span></div>
-            <div class="meter"><i style="width:${p}%;background:${a.hex}"></i></div></div>`;}).join('')}</div></div>
+            <div class="meter"><i style="width:${p}%;background:${a.hex}"></i></div></div>`;}).join('')}</div></div>`:''}
     </div></div>`;
 }
 
