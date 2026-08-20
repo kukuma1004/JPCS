@@ -219,6 +219,9 @@ tbody tr:last-child td{border-bottom:0}
   transition:opacity 140ms var(--ease), transform 140ms var(--ease-out)}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1);
   transition:opacity var(--dur-panel) var(--ease-out), transform var(--dur-panel) var(--ease-out)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;
+  background:var(--line);border:1px solid var(--line);vertical-align:middle}
+.dot.on{background:var(--accent);border-color:var(--accent)}
 .badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:13px}
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;
   padding:4px 9px;border-radius:var(--r-full);border:1px solid var(--line);
@@ -414,7 +417,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.19.1710';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.19.1930';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -930,6 +933,49 @@ function studyStats(sid){
           pct: next? Math.min(100,Math.round(totalMin/(next*60)*100)) : 100};
 }
 /* 학생 화면·교사 화면 양쪽에서 쓰는 성취 카드 */
+/* 그날 일지를 얼마나 꼼꼼히 적었는지 (0~5) */
+function jFill(j){
+  if(!j) return 0; let n=0;
+  if((j.subjects||[]).length) n++;
+  if((j.difficult||[]).length) n++;
+  if(String(j.seed||'').trim()) n++;
+  if(String(j.good||'').trim()) n++;
+  if(String(j.memo||'').trim() || Number(j.mood) || Number(j.focus)) n++;
+  return n;
+}
+/* ── 오늘 칭찬할 거리 ──
+   "많이 공부한 학생"을 뽑지 않습니다. 그건 등수가 되고, 등수는 이 앱에 두지 않기로 했습니다.
+   대신 교사가 놓치기 쉬운 순간을 찾아냅니다 — 처음 쓴 날, 오래 쉬다 돌아온 날,
+   이정표를 넘은 날, 남이 안 적는 것까지 적은 날. 말 한마디가 가장 크게 남는 순간들입니다. */
+function praiseList(st){
+  const out=[];
+  st.forEach(s=>{
+    const weekly = s.logMode==='weekly';
+    const js=jrn({studentId:s.id}).filter(j=>inYear(j.date));
+    const t=js.find(j=> weekly ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today());
+    if(!t) return;                                   // 오늘(이번 주) 안 썼으면 대상이 아닙니다
+    const g=studyStats(s.id), reasons=[];
+
+    if(js.length===1) reasons.push({t:'첫 기록을 남김',w:6});
+    else{
+      const prev=js.filter(j=>j.date<t.date)[0];     // jrn 은 최신순 정렬
+      const gap=prev? Math.round((new Date(t.date)-new Date(prev.date))/86400000) : 999;
+      if(gap>=4) reasons.push({t:`${gap>=90?'오랜만에':gap+'일 만에'} 다시 씀`,w:6});
+    }
+    if([7,14,21,30,50,100,200].includes(g.streak)) reasons.push({t:`${g.streak}일 연속 달성`,w:5});
+    // 오늘 기록으로 누적 이정표를 넘겼는가
+    const before=g.totalMin-(Number(t.totalMinutes)||0);
+    const cross=MILESTONES.find(m=> before < m*60 && g.totalMin >= m*60);
+    if(cross) reasons.push({t:`${MEDALS[cross]} 누적 ${cross}시간 돌파`,w:6});
+    if(String(t.seed||'').trim()) reasons.push({t:'궁금한 걸 적어둠',w:4});
+    if(jFill(t)>=4) reasons.push({t:'빠짐없이 꼼꼼히 적음',w:3});
+    if(String(t.good||'').trim()) reasons.push({t:'잘한 일을 스스로 찾음',w:2});
+
+    if(reasons.length) out.push({s,t,reasons,score:Math.max(...reasons.map(r=>r.w))});
+  });
+  return out.sort((a,b)=>b.score-a.score || b.reasons.length-a.reasons.length);
+}
+
 function achieveCard(sid,mine){
   const g=studyStats(sid);
   const who=mine?'':'이 학생은 ';
@@ -1760,6 +1806,13 @@ function viewDash(){
   const wroteW=new Set(C.journals.filter(j=>j.type==='weekly'&&j.date===thisWeek).map(j=>j.studentId));
   const wrote=new Set([...wroteD,...wroteW].filter(id=>scoped.has(id)));
   const missing=st.filter(s=>s.logMode==='weekly' ? !wroteW.has(s.id) : !wroteD.has(s.id));
+  // 쓴 학생도 보여줍니다 — 안 쓴 사람만 보이면 재촉만 하게 됩니다
+  const done=st.filter(s=>!missing.includes(s)).map(s=>{
+    const j=jrn({studentId:s.id}).find(x=> s.logMode==='weekly'
+      ? (x.type==='weekly'&&x.date===wk(today())) : x.date===today());
+    return {s, j, fill:jFill(j), seed:!!String(j?.seed||'').trim(), min:Number(j?.totalMinutes)||0};
+  });
+  const praise=praiseList(st);
   const totalCells=Math.max(1,st.length*areaKeys().length),
     doneCells=C.records.filter(r=>r.status==='done'&&scoped.has(r.studentId)&&Number(r.year||curYear())===curYear()).length;
   const series=[]; for(let i=6;i>=0;i--){const d=addDays(today(),-i),day=C.journals.filter(j=>j.date===d&&scoped.has(j.studentId));
@@ -1781,6 +1834,23 @@ function viewDash(){
         `<span class="muted tiny">${Math.round(doneCells/totalCells*100)}% 진행</span>`)}
       ${stat(recent.filter(j=>j.seed).length,'세특 소재 후보','<span class="muted tiny">학생이 남긴 궁금증</span>')}
     </div>
+    ${praise.length?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash)">
+      <div class="card-b"><b class="small" style="color:var(--accent-ink)">✦ 오늘 한마디 해주면 좋을 학생</b>
+      <div class="tiny muted mb-s">공부를 많이 한 순서가 아닙니다. 처음 쓴 날, 오래 쉬다 돌아온 날, 이정표를 넘은 날 —
+        말 한마디가 가장 크게 남는 순간들입니다.</div>
+      <div style="display:flex;flex-direction:column;gap:7px">${praise.slice(0,8).map(x=>
+        `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="tag on" data-act="open" data-id="${x.s.id}" data-tab="journal"
+            style="cursor:pointer;min-width:78px;justify-content:center">${esc(x.s.name)}</button>
+          <span class="small">${x.reasons.map(r=>r.t).join(' · ')}</span>
+        </div>`).join('')}</div>
+      ${(()=>{ const top=praise.slice(0,8);
+        const msg=top.map(x=>`${x.s.name} — ${x.reasons.map(r=>r.t).join(', ')}`).join('\n');
+        return `<div class="row mt-s" style="gap:6px;flex-wrap:wrap">
+          <button class="btn sm" data-act="copynag" data-t="${esc(msg)}">명단·이유 복사</button>
+          <span class="tiny muted">종례 때 부르거나 개별 메시지 보낼 때 쓰세요</span></div>`; })()}
+      </div></div>`:''}
+
     ${(()=>{ const week=addDays(today(),-6);
       const sig=st.map(x=>{ const js=C.journals.filter(j=>j.studentId===x.id&&j.date>=week&&inYear(j.date));
         const low=js.filter(j=>Number(j.mood)&&Number(j.mood)<=2).length;
@@ -1806,17 +1876,25 @@ function viewDash(){
     <div class="grid g2 mb">
       <div class="card"><div class="card-h"><h3>반 평균 공부시간</h3><span class="sub">최근 7일</span></div>
         <div class="card-b">${lineChart(series)}</div></div>
-      <div class="card"><div class="card-h"><h3>학습일지 미작성</h3><span class="sub" style="margin-left:auto">${missing.length}명</span></div>
-        <div class="card-b">${missing.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${missing.map(s=>
-          `<button class="tag warn" data-act="open" data-id="${s.id}" style="cursor:pointer">${esc(s.name)}</button>`).join('')}</div>
-          ${(()=>{ const names=missing.map(x=>x.name).join(', ');
-            const link=location.origin+location.pathname;
-            const msg=`[${S.school?.name||'기록실'}] 오늘 학습일지가 아직 비어 있어요. 5분이면 됩니다.\n${link}\n(접속코드는 나눠준 것 그대로)`;
-            return `<div class="row mt" style="gap:6px;flex-wrap:wrap">
-              <button class="btn sm" data-act="copynag" data-t="${esc(msg)}">단체 문자 문구 복사</button>
-              <button class="btn sm" data-act="copynag" data-t="${esc(names)}">이름만 복사</button>
-              <span class="tiny muted">문자·카톡에 붙여넣어 보내세요</span></div>`; })()}`
-          :`<div class="empty"><b>전원 작성 완료</b>매일 모드는 오늘, 주간 모드는 이번 주 기준입니다.</div>`}</div></div>
+      <div class="card"><div class="card-h"><h3>오늘 학습일지</h3>
+        <span class="sub" style="margin-left:auto">작성 ${done.length}명 · 미작성 ${missing.length}명</span></div>
+        <div class="card-b">
+          ${done.length?`<div class="tiny muted mb-s">✓ 오늘 쓴 학생 <span class="muted">— 이름을 누르면 그 학생 일지로 갑니다</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">${done.map(x=>
+              `<button class="tag on" data-act="open" data-id="${x.s.id}" data-tab="journal" style="cursor:pointer">
+                ${esc(x.s.name)}${x.fill>=4?' <span style="opacity:.75">꼼꼼</span>':''}${x.seed?' ✦':''}
+                ${x.min?` <span style="opacity:.7">${hm(x.min)}</span>`:''}</button>`).join('')}</div>`:''}
+          ${missing.length?`<div class="tiny muted mb-s" style="margin-top:${done.length?'14px':'0'}">◇ 아직 안 쓴 학생</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">${missing.map(s=>
+              `<button class="tag warn" data-act="open" data-id="${s.id}" style="cursor:pointer">${esc(s.name)}</button>`).join('')}</div>
+            ${(()=>{ const names=missing.map(x=>x.name).join(', ');
+              const link=location.origin+location.pathname;
+              const msg=`[${S.school?.name||'기록실'}] 오늘 학습일지가 아직 비어 있어요. 5분이면 됩니다.\n${link}\n(접속코드는 나눠준 것 그대로)`;
+              return `<div class="row mt-s" style="gap:6px;flex-wrap:wrap">
+                <button class="btn sm" data-act="copynag" data-t="${esc(msg)}">단체 문자 문구 복사</button>
+                <button class="btn sm" data-act="copynag" data-t="${esc(names)}">이름만 복사</button></div>`; })()}`
+          :`<div class="empty" style="padding:16px 0"><b>전원 작성 완료</b>오늘 한 명도 빠지지 않았습니다.</div>`}
+        </div></div>
     </div>
     <div class="grid g2">
       <div class="card"><div class="card-h"><h3>학생들이 어려워하는 과목</h3><span class="sub">최근 7일 언급</span></div>
@@ -1833,7 +1911,7 @@ function viewDash(){
 /* ── 학생 목록 ── */
 const SORTS = [['','번호순 (기본)'],['name','이름순'],['week','최근 7일 공부시간 많은 순'],
   ['weekLow','최근 7일 공부시간 적은 순'],['total','누적 공부시간 많은 순'],
-  ['days','기록한 날 많은 순'],['idle','오래 안 쓴 순']];
+  ['days','기록한 날 많은 순'],['idle','오래 안 쓴 순'],['todo','오늘 안 쓴 학생 먼저']];
 function sortStudents(list){
   const k=S.filter.sort||'';
   if(!k) return list;
@@ -1848,6 +1926,9 @@ function sortStudents(list){
   if(k==='total')   a.sort((x,y)=>studyStats(y.id).totalMin-studyStats(x.id).totalMin);
   if(k==='days')    a.sort((x,y)=>studyStats(y.id).daysWritten-studyStats(x.id).daysWritten);
   if(k==='idle')    a.sort((x,y)=>last(x).localeCompare(last(y)));
+  if(k==='todo'){ const w=s=>C.journals.some(j=>j.studentId===s.id&&(s.logMode==='weekly'
+      ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today()))?1:0;
+    a.sort((x,y)=>w(x)-w(y)); }
   return a;
 }
 
@@ -1869,6 +1950,7 @@ function viewStudents(){
     ${S.showTools?studentAdminCard()+excelCard():''}
     <div class="card">
       <div class="card-h"><h3>기록 현황표</h3><span class="sub" style="margin-left:auto">
+        <span class="dot on"></span> 오늘 작성 <span style="margin-right:8px"></span>
         <span class="pill" style="background:var(--accent)"></span> 완료
         <span class="pill" style="background:#fff;border:1px dashed var(--muted);margin-left:8px"></span> 작성중
         <span class="pill" style="background:var(--surface-2);border:1px solid var(--line);margin-left:8px"></span> 미작성</span></div>
@@ -1881,8 +1963,11 @@ function viewStudents(){
         <tbody>${st.map(s=>{
           const js=C.journals.filter(j=>j.studentId===s.id&&j.date>=addDays(today(),-6)&&inYear(j.date));
           const tot=js.reduce((a,b)=>a+b.totalMinutes,0), cn=couns(s.id).length, g=studyStats(s.id);
+          const wroteToday=C.journals.some(j=>j.studentId===s.id&&(s.logMode==='weekly'
+            ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today()));
           return `<tr>
             <td><button class="btn ghost sm" data-act="open" data-id="${s.id}" style="padding:2px 4px">
+              <span class="dot ${wroteToday?'on':''}" title="${wroteToday?'오늘 작성함':'오늘 아직 안 씀'}"></span>
               <b>${esc(s.name)}</b> <span class="muted tiny mono">${scode(s)}</span></button></td>
             ${areaKeys().map(k=>{const r=recs({studentId:s.id,area:k})[0];
               const cls2=!r?'':(r.status==='done'?'done':'draft'), bg=r&&r.status==='done'?AREAS[k].hex:'';
