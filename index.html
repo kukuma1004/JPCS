@@ -414,7 +414,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.19.1120';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.19.1710';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -759,6 +759,21 @@ async function diagnose(){
     },`규칙의 ${col} 섹션을 확인하세요.`);
   }
 
+  // 불러오기는 됐는데 화면에 안 나오는 경우 — 대부분 학년도가 어긋난 것입니다
+  {
+    const y=curYear();
+    const js=C.journals||[], sts=C.students||[];
+    const jIn=js.filter(j=>inYear(j.date,y)).length, sIn=sts.filter(x=>enrollOf(x,y)).length;
+    const cnt={}; js.forEach(j=>{const k=yearOfDate(j.date); cnt[k]=(cnt[k]||0)+1;});
+    const spread=Object.entries(cnt).sort((a,b)=>b[0]-a[0]).map(([k,v])=>`${k}학년도 ${v}건`).join(' / ')||'없음';
+    const ok = !js.length || jIn>0;
+    out.push({name:'화면에 보이는 학년도',
+      ok,
+      detail:`지금 보는 학년도 ${y} · 이 학년도의 학습일지 ${jIn}건 / 학생 ${sIn}명\n`
+            +`불러온 전체 학습일지 ${js.length}건 → ${spread}`,
+      hint: ok? null : `기록은 남아 있지만 지금 보는 학년도(${y})와 달라 화면에서 빠졌습니다. 왼쪽 위 학년도를 바꿔보세요.`});
+  }
+
   await step('호스트 등록 확인 (hosts/내 uid)',async()=>{
     const d=await getDoc(doc(FB.db,'hosts',u.uid));
     return d.exists() ? '호스트로 등록되어 있습니다' : '호스트가 아닙니다 (일반 교사 계정, 정상)';
@@ -775,13 +790,32 @@ const DB = {
     if(!this.cloud){ const raw=LS.get(LKEY);
       C = {students:[],records:[],journals:[],counsels:[],briefs:[], ...(raw?JSON.parse(raw):seed())};
       if(!raw) this._localSave(); return; }
-    const {collection,getDocs,doc,getDoc,query,where}=FB.fs, sid=S.school.id;
+    const {collection,getDocs,doc,getDoc,query,where,limit}=FB.fs, sid=S.school.id;
     // 학생은 본인 데이터만 받는다 — 다른 학생 정보·생기부 기록은 아예 내려받지 않음
+    //
+    // ★ 여기서 오류가 나면 절대 조용히 넘어가지 않는다.
+    //   예전에는 조회가 막히면 그대로 예외가 튀어서, 학생 화면에는 아무 설명 없이
+    //   빈 일지만 떴다. 학생 눈에는 "내가 쓴 게 다 날아갔다"로 보인다.
+    //   실제로는 하나도 지워지지 않았고 읽어오지 못했을 뿐이다.
     if(S.me.role==='student'){
-      const my=await getDoc(doc(FB.db,'schools',sid,'students',S.me.studentId));
-      C.students = my.exists()?[{id:my.id,...my.data()}]:[];
-      const js=await getDocs(query(collection(FB.db,'schools',sid,'journals'),where('studentId','==',S.me.studentId)));
-      C.journals = js.docs.map(d=>({id:d.id,...d.data()}));
+      S.loadErrors=[];
+      try{
+        const my=await getDoc(doc(FB.db,'schools',sid,'students',S.me.studentId));
+        C.students = my.exists()?[{id:my.id,...my.data()}]:[];
+        if(!my.exists()) S.loadErrors.push('내 학생 정보 : 명단에 이 학생 문서가 없습니다 (선생님이 학생을 다시 등록했을 수 있습니다)');
+      }catch(e){ C.students=[]; S.loadErrors.push(`내 학생 정보 : ${emsg(e)}`); }
+
+      // 보안 규칙 버전에 따라 조회 개수(limit)를 요구하기도, 하지 않기도 한다.
+      // 한쪽이 막히면 다른 쪽으로 한 번 더 해본다. 규칙이 옛 버전이어도 기록은 보이게.
+      const col=collection(FB.db,'schools',sid,'journals');
+      const mine=where('studentId','==',S.me.studentId);
+      let loaded=null, err1=null;
+      try{ loaded=await getDocs(query(col,mine,limit(500))); }
+      catch(e){ err1=e;
+        try{ loaded=await getDocs(query(col,mine)); }
+        catch(e2){ S.loadErrors.push(`내 학습일지 : ${emsg(e2)}`); }
+      }
+      C.journals = loaded ? loaded.docs.map(d=>({id:d.id,...d.data()})) : [];
       C.records=[]; C.counsels=[]; C.briefs=[];
       return;
     }
@@ -927,6 +961,8 @@ const areaKeys = () => AREA_KEYS.filter(k=>AREA_ON().includes(k));
 const couns    = sid => C.counsels.filter(c=>c.studentId===sid).sort((a,b)=>b.date.localeCompare(a.date));
 // 학년도 안의 학습일지 (날짜로 판별 — 3/1 ~ 다음해 2/28)
 const inYear = (date,y=curYear()) => date>=`${y}-03-01` && date<=`${y+1}-02-29`;
+// 그 날짜가 속한 학년도 (3월 1일에 새 학년도가 시작합니다)
+const yearOfDate = d => { const [Y,M]=String(d).split('-').map(Number); return M>=3?Y:Y-1; };
 // 브리핑·담임 코멘트는 학생이 읽을 수 없는 별도 컬렉션에 둔다 (문서 id = studentId)
 const brief    = sid => C.briefs.find(b=>b.id===sid)||{};
 
@@ -1470,6 +1506,67 @@ function scopeBanner(){
         배정 전에는 학생 목록이 비어 있습니다. (설정 → 교사 관리에서 배정합니다)</div>
     </div></div></div>`;
 }
+/* ── 기록이 있는데 화면에 안 나올 때 ──
+   지금까지 가장 많이 헛돈 지점입니다. 데이터는 멀쩡히 있는데 학년도가 어긋나
+   화면에서만 사라지는 경우인데, 화면에 아무 설명이 없으면 "다 날아갔다"로 보입니다.
+   그래서 이유와 해결 버튼을 상시로 띄웁니다. */
+function yearMismatchBanner(){
+  if(S.me?.role==='student' || S.view==='host') return '';
+  const y=curYear();
+  const js=C.journals||[], sts=C.students||[];
+  if(!js.length && !sts.length) return '';   // 진짜로 비어 있는 것 — 다른 문제입니다
+
+  const jsIn = js.filter(j=>inYear(j.date,y)).length;
+  const stIn = sts.filter(x=>enrollOf(x,y)).length;
+  const jsBad = js.length>0 && jsIn===0;     // 일지가 있는데 이 학년도엔 하나도 없다
+  const stBad = sts.length>0 && stIn===0;    // 학생이 있는데 이 학년도 재적자가 없다
+  if(!jsBad && !stBad) return '';
+
+  // 어느 학년도에 들어 있는지 세어봅니다
+  const cnt={};
+  js.forEach(j=>{const k=yearOfDate(j.date); cnt[k]=(cnt[k]||0)+1;});
+  const jYears=Object.keys(cnt).map(Number).sort((a,b)=>b-a);
+  const sYears=[...new Set(sts.flatMap(x=>[Number(x.year),...(x.history||[]).map(h=>Number(h.year))])
+    .filter(Boolean))].sort((a,b)=>b-a);
+  const best = (jsBad? jYears[0] : sYears[0]) || jYears[0] || sYears[0];
+  if(!best || best===y) return '';
+
+  const what = jsBad&&stBad ? `학습일지 ${js.length}건과 학생 ${sts.length}명 모두`
+             : jsBad ? `학습일지 ${js.length}건이`
+             : `학생 ${sts.length}명이`;
+  const where = (jsBad? jYears : sYears).slice(0,3).join(', ');
+
+  return `<div style="padding:12px 26px 0"><div class="card" style="border-color:#eddac9;background:var(--warn-wash);box-shadow:none">
+    <div class="card-b" style="padding:13px 15px">
+      <b class="small" style="color:var(--warn)">기록은 그대로 있습니다. 학년도가 어긋나 화면에만 안 나옵니다</b>
+      <div class="tiny mt-s" style="line-height:1.9;color:var(--ink-2)">
+        지금 <b>${y}학년도</b>를 보고 있는데, 불러온 ${what}
+        <b>${where}학년도</b>에 들어 있습니다.
+        이 앱은 3월 1일에 학년도가 바뀌는데 학교 설정의 학년도는 자동으로 넘어가지 않습니다.
+        <b>아무것도 지워지지 않았습니다.</b> 학년도만 맞추면 그대로 다시 나옵니다.</div>
+      <div class="row mt-s" style="gap:6px;flex-wrap:wrap">
+        <button class="btn pri sm" data-act="fixyear" data-y="${best}">${best}학년도로 바꿔서 보기</button>
+        ${isAdmin()&&DB.cloud?`<button class="btn sm" data-act="fixyearsave" data-y="${best}">학교 기본 학년도도 ${best}로 바꾸기</button>`:''}
+        <span class="tiny muted">왼쪽 위 학년도 선택으로도 바꿀 수 있습니다</span></div>
+    </div></div></div>`;
+}
+
+/* 학생용 — 겁먹지 않게, 그리고 선생님께 그대로 보여줄 수 있게 */
+function studentErrBanner(){
+  if(!S.loadErrors?.length) return '';
+  return `<div class="card mb" style="border-color:#e8c9c6;background:var(--danger-wash);box-shadow:none">
+    <div class="card-b" style="padding:13px 15px">
+      <b class="small" style="color:var(--danger)">기록을 불러오지 못했습니다</b>
+      <div class="tiny mt-s" style="line-height:1.9;color:var(--ink-2)">
+        <b>쓴 내용이 지워진 것이 아닙니다.</b> 서버에 그대로 있는데 이 화면으로 가져오지 못한 것입니다.
+        지금 새로 쓰면 예전 기록과 겹칠 수 있으니, 먼저 아래 <b>다시 불러오기</b>를 눌러보세요.
+        그래도 안 되면 이 화면을 선생님께 보여주세요.</div>
+      <ul class="tiny" style="margin:8px 0 0;padding-left:17px;color:var(--danger);line-height:1.8">
+        ${S.loadErrors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul>
+      <div class="row mt-s" style="gap:6px"><button class="btn sm pri" data-act="reload">다시 불러오기</button></div>
+    </div></div>`;
+}
+
 function loadErrBanner(){
   if(!S.loadErrors?.length) return '';
   return `<div style="padding:12px 26px 0"><div class="card" style="border-color:#e8c9c6;background:var(--danger-wash);box-shadow:none">
@@ -1608,6 +1705,12 @@ function shellTeacher(){
         ${nav('settings','설정','⚙')}
         ${S.isHost?nav('host','호스트 콘솔','◆'):''}
       </div>
+      <div class="navgroup"><span>이 학년도 데이터</span>
+        <div class="tiny muted" style="line-height:1.85;padding:2px 4px 6px">
+          학생 ${st.length}명 · 학습일지 ${C.journals.filter(j=>inYear(j.date)).length}건
+          ${C.journals.length!==C.journals.filter(j=>inYear(j.date)).length
+            ? `<br><span style="color:var(--warn)">다른 학년도에 ${C.journals.length-C.journals.filter(j=>inYear(j.date)).length}건 더 있습니다</span>`:''}
+        </div></div>
       ${areaKeys().length?`<div class="navgroup"><span>기록 진행</span>
         ${areaKeys().map(k=>{const a=AREAS[k],d=recs({area:k}).filter(r=>r.status==='done'&&st.some(x=>x.id===r.studentId)).length;
           return `<button class="nav" data-act="nav" data-v="students"><span class="pill" style="background:${a.hex}"></span>${a.short}
@@ -1621,7 +1724,7 @@ function shellTeacher(){
         <button class="btn ghost sm" data-act="logout" style="margin-left:auto">나가기</button></div>
       </div>
     </aside>
-    <main class="main">${loadErrBanner()}${S.mode==='demo'?demoBanner('teacher'):''}${scopeBanner()}${teacherView()}</main>
+    <main class="main">${loadErrBanner()}${yearMismatchBanner()}${S.mode==='demo'?demoBanner('teacher'):''}${scopeBanner()}${teacherView()}</main>
     <nav class="mob">
       <button class="${S.view==='home'?'on':''}" data-act="nav" data-v="home"><i>◉</i>대시보드</button>
       <button class="${S.view==='students'?'on':''}" data-act="nav" data-v="students"><i>☰</i>학생</button>
@@ -2560,7 +2663,7 @@ function studentWeek(s){
      </select>
      <button class="btn sm" data-act="setmode" data-v="daily">매일 쓰기로</button>`)}
   <div class="wrap" style="max-width:700px">
-    ${installCard()}
+    ${studentErrBanner()}${installCard()}
     ${j.id?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash);box-shadow:none">
       <div class="card-b small" style="padding:11px 15px"><b>작성 완료</b> · 고치고 저장하면 덮어써집니다.</div></div>`:''}
     ${(()=>{const g=studyStats(s.id); return g.hours>=1?`<div class="card mb" style="box-shadow:none;background:var(--surface-2)">
@@ -2628,7 +2731,7 @@ function studentWrite(s){
     `<input type="date" value="${date}" data-act="setdate" style="width:auto" max="${today()}">
      <button class="btn sm" data-act="setmode" data-v="weekly">주간으로 쓰기</button>`)}
   <div class="wrap" style="max-width:700px">
-    ${installCard()}
+    ${studentErrBanner()}${installCard()}
     ${j.id?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash);box-shadow:none">
       <div class="card-b row" style="padding:11px 15px;gap:10px;flex-wrap:wrap">
         <span class="tag on">작성 완료</span>
@@ -2713,6 +2816,7 @@ function studentProfile(s){
   const filled=PROFILE_FIELDS.filter(f=>String(pf[f.k]||'').trim()).length;
   return `${topbar('나의 소개', s.profileAt?`${kfull(dstr(new Date(s.profileAt)))}에 마지막으로 고쳤습니다`:'상담할 때 선생님이 참고합니다')}
   <div class="wrap" style="max-width:700px">
+    ${studentErrBanner()}
     <div class="card mb" style="box-shadow:none;background:var(--surface-2)"><div class="card-b" style="padding:13px 15px">
       <div class="tiny muted" style="line-height:1.9">
         여기 적은 내용은 <b>담임 선생님이 상담할 때</b> 봅니다. 지금 정확하지 않아도 됩니다 — 생각이 바뀌면 언제든 고치세요.<br>
@@ -2737,6 +2841,7 @@ function studentMine(s){
   const tot=last.reduce((a,b)=>a+b.totalMinutes,0);
   return `${topbar('내 기록','최근 2주 학습 현황')}
   <div class="wrap" style="max-width:760px;padding-bottom:0">
+    ${studentErrBanner()}
     <div class="tiny muted mb">지난 일지의 <b>고치기</b>를 누르면 그날 내용을 다시 쓸 수 있습니다. 새로 생기지 않고 덮어써집니다.</div>
   </div>
   <div class="wrap" style="max-width:760px">
@@ -2748,6 +2853,17 @@ function studentMine(s){
     <div class="card mb"><div class="card-h"><h3>과목별 공부량</h3></div>
       <div class="card-b">${Object.keys(bySub).length?barList(Object.entries(bySub).sort((a,b)=>b[1]-a[1]),hm):'<div class="empty">아직 기록이 없습니다.</div>'}</div></div>
     <div class="card"><div class="card-h"><h3>지난 일지</h3></div><div class="card-b">
+      ${!js.length&&!S.loadErrors?.length?`<div class="card mb" style="box-shadow:none;background:var(--surface-2)">
+        <div class="card-b" style="padding:12px 14px">
+          <b class="small">예전에 쓴 기록이 있었는데 안 보이나요?</b>
+          <div class="tiny muted mt-s" style="line-height:1.9">
+            오류는 없는데 기록이 0건입니다. 계정이 다른 학생 번호를 가리키고 있을 수 있습니다.
+            아래 정보를 선생님께 그대로 보여주세요. 선생님 화면에는 기록이 남아 있을 가능성이 큽니다.</div>
+          <div class="tiny mono muted mt-s" style="line-height:1.8;user-select:all">
+            내 문서 ${esc(S.me?.studentId||'없음')} · 학교 ${esc(S.school?.id||'')}<br>
+            불러온 일지 0건 · 버전 ${BUILD}</div>
+          <button class="btn sm mt-s" data-act="reload">다시 불러오기</button>
+        </div></div>`:''}
       ${js.length?js.slice(0,20).map(j=>`<div class="jlog">
         <div class="spread"><b class="small">${kdate(j.date)}${j.date===today()?' <span class="tag on">오늘</span>':''}</b>
           <span class="row" style="gap:6px">
@@ -3051,6 +3167,9 @@ function handle(act,el){
   pwainstall(){ if(!PWA.prompt) return; PWA.prompt.prompt();
     PWA.prompt.userChoice.finally(()=>{ PWA.prompt=null; render(); }); },
   pwadismiss(){ LS.set('gs.nopwa','1'); render(); },
+  reload(){ busy(el,async()=>{ await DB.loadAll();
+    toast(S.loadErrors?.length?'아직 불러오지 못했습니다. 선생님께 알려주세요.':'다시 불러왔습니다',3500);
+    render(); }); },
   setdate2(){ S.filter.date=el.dataset.d; render(); },
   toggarea(){ const k=el.dataset.v, on=AREA_ON();
     const next = on.includes(k)? on.filter(x=>x!==k) : [...on,k];
@@ -3107,6 +3226,12 @@ function handle(act,el){
   /* 설정 */
   fsize(){ settings.fs=el.dataset.v; render(); },
   setyear(){ S.year=Number(el.value); render(); },
+  fixyear(){ S.year=Number(el.dataset.y); toast(`${el.dataset.y}학년도로 바꿨습니다`); render(); },
+  fixyearsave(){ busy(el,async()=>{ const y=Number(el.dataset.y);
+    S.year=y; S.school.currentYear=y;
+    const {doc,setDoc}=FB.fs;
+    await setDoc(doc(FB.db,'schools',S.school.id),{currentYear:y},{merge:true});
+    toast(`학교 기본 학년도를 ${y}로 바꿨습니다`); render(); }); },
   setyear2(){ S.year=Number(el.dataset.y); render(); },
   setcuryear(){ busy(el,async()=>{
     const y=Number($('#curyear').value);
