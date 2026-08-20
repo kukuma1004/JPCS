@@ -219,6 +219,15 @@ tbody tr:last-child td{border-bottom:0}
   transition:opacity 140ms var(--ease), transform 140ms var(--ease-out)}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1);
   transition:opacity var(--dur-panel) var(--ease-out), transform var(--dur-panel) var(--ease-out)}
+.tagpick{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
+.tagbtn{padding:9px 14px;border-radius:var(--r-full);border:1px solid var(--line);
+  background:var(--surface);color:var(--ink-2);font-size:14.5px;font-weight:500;cursor:pointer;
+  transition:background var(--dur-ui) var(--ease),border-color var(--dur-ui) var(--ease),
+             color var(--dur-ui) var(--ease),transform var(--dur-press) var(--ease-out)}
+.tagbtn:hover{border-color:var(--accent);background:var(--accent-wash)}
+.tagbtn:active{transform:scale(.96)}
+.tagbtn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tagbtn.none.on{background:var(--muted);border-color:var(--muted)}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;
   background:var(--line);border:1px solid var(--line);vertical-align:middle}
 .dot.on{background:var(--accent);border-color:var(--accent)}
@@ -417,7 +426,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.19.1930';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.20.1730';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -785,6 +794,29 @@ async function diagnose(){
   return out;
 }
 
+/* 완성된 특기사항을 엑셀 한 권으로 — 영역마다 시트 하나씩.
+   NEIS에 옮길 때 학번 순서 그대로여야 실수가 없습니다. */
+async function dumpRecords(keys){
+  const X=await loadXLSX(), wb=X.utils.book_new();
+  const st=students(); let total=0;
+  keys.forEach(k=>{
+    const a=AREAS[k];
+    const rows=st.map(s=>{ const r=recs({studentId:s.id,area:k})[0]; const t=String(r?.text||'').trim();
+      return {s,r,t}; }).filter(x=>x.t);
+    if(!rows.length) return;
+    total+=rows.length;
+    const aoa=[['학번','이름','상태','byte','문장',a.name,...(a.meta||[]).map(m=>m.label)]];
+    rows.forEach(({s,r,t})=>aoa.push([scode(s),s.name,r.status==='done'?'완료':'작성중',
+      bytes(t),sentCount(t),t,...(a.meta||[]).map(m=>r.meta?.[m.k]||'')]));
+    const ws=X.utils.aoa_to_sheet(aoa);
+    ws['!cols']=[{wch:10},{wch:9},{wch:8},{wch:7},{wch:6},{wch:96},{wch:16}];
+    X.utils.book_append_sheet(wb,ws,a.short);
+  });
+  if(!total){ toast('내려받을 문안이 없습니다'); return; }
+  X.writeFile(wb,`${S.school?.name||'기록실'}_특기사항_${curYear()}학년도_${today()}.xlsx`);
+  toast(`${total}건을 내려받았습니다`);
+}
+
 /* ───────────── 저장소 (캐시 우선 + 백그라운드 동기화) ───────────── */
 const LKEY='girokshil.v2';
 const DB = {
@@ -899,6 +931,34 @@ function dupCount(sid){
 /* ── 학생이 직접 적는 나의 소개 ──
    상담과 학부모 면담에서 가장 자주 필요한 것들만 담았습니다.
    sensitive:true 항목은 담당 교사만 봅니다 — 학부모 리포트와 리포트 생성 AI에 넘기지 않습니다. */
+/* ── 학교생활 태그 ──
+   "오늘 잘한 일"을 빈 칸으로 물으면 대부분 "없는데요"가 돌아옵니다.
+   자기 칭찬을 요구하는 질문이라 부담스럽고, 빈 네모칸은 그 자체로 장벽입니다.
+   그래서 고르기부터 하게 했습니다. 고르기만 해도 근거가 됩니다.
+
+   질문은 매일 같습니다. 질문을 바꾸면 대답은 쉬워지지만 기록이 뒤죽박죽이 되어
+   리포트에서도 행특에서도 무슨 맥락인지 알 수 없게 됩니다.
+   질문은 고정하고, 고를 것을 여럿 두어 지루하지 않게 하는 쪽을 택했습니다. */
+const LIFE_TAGS = [
+  {k:'help',    label:'친구를 도왔다',        axis:'inter'},
+  {k:'helped',  label:'도움을 받았다',        axis:'inter'},
+  {k:'ask',     label:'먼저 물어봤다',        axis:'inter'},
+  {k:'speak',   label:'내 의견을 냈다',       axis:'inter'},
+  {k:'present', label:'발표했다',             axis:'role'},
+  {k:'role',    label:'역할을 맡았다',        axis:'role'},
+  {k:'lead',    label:'먼저 나서서 정리했다', axis:'role'},
+  {k:'finish',  label:'미루던 걸 끝냈다',     axis:'overcome'},
+  {k:'retry',   label:'틀린 걸 다시 했다',    axis:'overcome'},
+  {k:'none',    label:'오늘은 별일 없었다',   axis:''},
+];
+const TAG_LABEL = Object.fromEntries(LIFE_TAGS.map(t=>[t.k,t.label]));
+// 고른 태그를 세어 봅니다 (별일 없었다는 세지 않습니다)
+function tagCount(js){
+  const c={};
+  (js||[]).forEach(j=>(j.tags||[]).forEach(k=>{ if(k!=='none') c[k]=(c[k]||0)+1; }));
+  return c;
+}
+
 const PROFILE_FIELDS = [
   {k:'career', label:'희망 진로 · 되고 싶은 것', ph:'예) 간호사, 데이터 분석가, 아직 잘 모르겠음도 괜찮습니다', rows:1},
   {k:'why',    label:'그 진로에 관심이 생긴 계기', ph:'무엇을 보고, 겪고, 읽고 나서 관심이 생겼는지', rows:2},
@@ -941,7 +1001,8 @@ function jFill(j){
   if(String(j.seed||'').trim()) n++;
   if(String(j.good||'').trim()) n++;
   if(String(j.memo||'').trim() || Number(j.mood) || Number(j.focus)) n++;
-  return n;
+  if((j.tags||[]).filter(k=>k!=='none').length) n++;
+  return Math.min(5,n);
 }
 /* ── 오늘 칭찬할 거리 ──
    "많이 공부한 학생"을 뽑지 않습니다. 그건 등수가 되고, 등수는 이 앱에 두지 않기로 했습니다.
@@ -970,11 +1031,188 @@ function praiseList(st){
     if(String(t.seed||'').trim()) reasons.push({t:'궁금한 걸 적어둠',w:4});
     if(jFill(t)>=4) reasons.push({t:'빠짐없이 꼼꼼히 적음',w:3});
     if(String(t.good||'').trim()) reasons.push({t:'잘한 일을 스스로 찾음',w:2});
+    const tg=(t.tags||[]).filter(k=>k!=='none');
+    if(tg.length>=2) reasons.push({t:tg.slice(0,2).map(k=>TAG_LABEL[k]).join(', '),w:4});
+    else if(tg.length===1) reasons.push({t:TAG_LABEL[tg[0]],w:3});
 
     if(reasons.length) out.push({s,t,reasons,score:Math.max(...reasons.map(r=>r.w))});
   });
   return out.sort((a,b)=>b.score-a.score || b.reasons.length-a.reasons.length);
 }
+
+/* ═══════════ 행동특성 근거 자동 수집 ═══════════
+   행특은 이 앱의 중심입니다. 담임이 관찰한 것을 쓰는 기록이고,
+   여기 쌓이는 학습일지·상담·활동 기록이 곧 그 관찰의 원본이기 때문입니다.
+
+   그래서 교사가 무엇을 따로 입력하지 않아도, 여섯 축에 해당하는 근거가
+   저절로 모이게 했습니다. 다만 지어내지는 않습니다.
+   ─ 계산으로 확인되는 것(기록 빈도, 시간 변화, 과목 편중)은 수치로,
+   ─ 학생이 직접 쓴 문장은 원문 그대로,
+   ─ 근거가 없는 축은 비워 둡니다. 없는 것을 채우면 그게 가장 나쁩니다. */
+const HT_AXES = [
+  {k:'repeat',    label:'반복행동'},
+  {k:'situation', label:'경험 상황'},
+  {k:'inter',     label:'상호작용'},
+  {k:'role',      label:'책임 · 역할'},
+  {k:'overcome',  label:'어려움 극복'},
+  {k:'change',    label:'변화'},
+];
+// 학생이 쓴 문장에서 축을 알아보는 표현들
+const HT_WORDS = {
+  inter:/친구|짝(이|을|에게|과|한테)?|모둠|조원|조별|팀원|팀|같이|함께|도와|도움|설명해|가르쳐|알려\s*줬|알려\s*주|의견|토론|발표|물어봐|질문했|얘기했|이야기했/,
+  role:/역할|맡(아|았|은|게)|반장|부반장|조장|팀장|부장|서기|도우미|담당|주도|이끌|정리했|챙겼/,
+  overcome:/다시|또\s*풀|고쳐|보완|극복|틀린|오답|복습|안\s*(되|돼)(서|길래|더니)|어려웠지만|포기(하지|안)|끝까지|버텼|해냈|결국/,
+};
+/* 한글 받침에 맞춰 조사를 고릅니다. "3시간 10분로"처럼 어색해지지 않도록. */
+function jong(t){
+  const w=String(t||'').trim(); if(!w) return 0;
+  const c=w.charCodeAt(w.length-1);
+  if(c>=0xAC00&&c<=0xD7A3) return (c-0xAC00)%28;          // 0=받침없음, 8=ㄹ
+  if(/[0-9]$/.test(w)) return '24590'.includes(w.slice(-1))?0:1;
+  return 1;
+}
+const _ro = t => { const j=jong(t); return (j===0||j===8)?'로':'으로'; };
+const ro  = t => t+_ro(t);                                 // ~로 / ~으로
+const eun = t => t+(jong(t)?'은':'는');
+const ika = t => t+(jong(t)?'이':'가');
+
+const cut = (t,n=90) => { t=String(t||'').replace(/\s+/g,' ').trim(); return t.length>n? t.slice(0,n)+'…' : t; };
+
+function htEvidence(sid){
+  const s=student(sid);
+  const ev={}; HT_AXES.forEach(a=>ev[a.k]=[]);
+  if(!s) return ev;
+  const add=(k,text,date)=>{ const t=String(text||'').trim(); if(t) ev[k].push({text:t,date:date||''}); };
+
+  // 오래된 것부터 — 변화를 보려면 순서가 있어야 합니다
+  const js=jrn({studentId:sid}).filter(j=>inYear(j.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  const cs=couns(sid).filter(c=>inYear(c.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  const g=studyStats(sid);
+  if(!js.length && !cs.length) return ev;
+
+  const first=js[0]?.date, last=js[js.length-1]?.date;
+  const span=first? Math.max(1,Math.round((new Date(last)-new Date(first))/86400000)+1) : 0;
+
+  /* ── 반복행동 ── 계산으로 확인되는 것만 */
+  if(js.length>=3){
+    const rate=Math.round(js.length/span*7*10)/10;
+    add('repeat',`학습일지를 스스로 ${js.length}일 기록함 (${kfull(first).slice(6).trim()}부터 ${span}일 동안, 주 평균 ${rate}일)`,last);
+    if(g.best>=5) add('repeat',`가장 길게 이어간 연속 기록 ${g.best}일${g.streak>=5?`, 현재도 ${g.streak}일째 이어감`:''}`,last);
+  }
+  const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name; bySub[k]=(bySub[k]||0)+(Number(x.minutes)||0);}));
+  const tot=Object.values(bySub).reduce((a,b)=>a+b,0);
+  const rank=Object.entries(bySub).sort((a,b)=>b[1]-a[1]);
+  if(tot>0 && rank.length){
+    const [n1,m1]=rank[0], p1=Math.round(m1/tot*100);
+    if(p1>=35) add('repeat',`전체 공부시간의 ${p1}퍼센트를 ${n1}에 씀 (${hm(m1)}). 한 과목을 오래 붙잡는 편`,last);
+    else if(rank.length>=4) add('repeat',`${rank.slice(0,4).map(([n])=>n).join(', ')} 등 여러 과목에 시간을 고르게 나눠 씀`,last);
+    const zero=SUBJECT_GROUPS.filter(x=>!bySub[x]&&['국어','수학','영어'].includes(x));
+    if(zero.length) add('repeat',`[교사 참고 · 문안에 쓰지 말 것] 기록된 기간 동안 ${zero.join(', ')} 공부시간이 한 번도 남지 않음. 정말 안 한 것인지 적기만 빠뜨린 것인지 확인 필요`,last);
+  }
+  const nDiff=js.reduce((a,j)=>a+((j.difficult||[]).length),0);
+  if(nDiff>=3) add('repeat',`어려웠던 부분을 스스로 ${nDiff}회 적어 둠. 모르는 것을 덮지 않고 남기는 습관`,last);
+  const seeds=js.filter(j=>String(j.seed||'').trim());
+  if(seeds.length>=2) add('repeat',`공부 중 생긴 궁금증을 ${seeds.length}회 따로 기록함`,last);
+
+  /* ── 경험 상황 ── 학생이 직접 쓴 문장을 원문 그대로 */
+  js.filter(j=>String(j.good||'').trim().length>=12).slice(-6).reverse()
+    .forEach(j=>add('situation',cut(j.good),j.date));
+  js.filter(j=>String(j.memo||'').trim().length>=15).slice(-4).reverse()
+    .forEach(j=>add('situation',cut(j.memo),j.date));
+  seeds.slice(-3).reverse().forEach(j=>add('situation',`궁금해한 것 — ${cut(j.seed)}`,j.date));
+  cs.slice(-3).reverse().forEach(c=>add('situation',`상담(${c.kind}) — ${cut(c.summary)}`,c.date));
+
+  /* ── 학생이 직접 고른 학교생활 태그 ──
+     빈 칸에 글을 쓰는 것보다 고르는 편이 훨씬 쉬워서, 이쪽이 가장 잘 쌓입니다.
+     횟수는 계산된 값이라 "이 학생이 실제로 그런 일을 몇 번 표시했는가"를 그대로 보여줍니다. */
+  const tc=tagCount(js);
+  const byAxis={};
+  LIFE_TAGS.forEach(t=>{ if(!t.axis||!tc[t.k]) return;
+    (byAxis[t.axis]=byAxis[t.axis]||[]).push([t.label,tc[t.k]]); });
+  Object.entries(byAxis).forEach(([ax,list])=>{
+    list.sort((a,b)=>b[1]-a[1]);
+    add(ax,`스스로 표시한 학교생활 — ${list.map(([l,n])=>`${l} ${n}회`).join(', ')} (${js.length}일 기록 중)`,last);
+    // 가장 자주 고른 것은 따로 짚어 둡니다
+    if(list[0][1]>=4) add(ax,`그중 "${list[0][0]}"를 ${list[0][1]}회로 가장 자주 표시함. 한 번이 아니라 반복해서 나타난 행동`,last);
+  });
+
+  /* ── 상호작용 · 책임 역할 · 어려움 극복 ── 학생 문장에서 찾아냅니다 */
+  const lines=[];
+  js.forEach(j=>['good','memo','hard'].forEach(f=>{
+    const t=String(j[f]||'').trim(); if(t.length>=8) lines.push({t,date:j.date,f}); }));
+  cs.forEach(c=>{ [c.summary,c.promise].filter(Boolean).forEach(t=>lines.push({t,date:c.date,f:'counsel'})); });
+  lines.forEach(({t,date,f})=>{
+    // "힘들었던 일"은 학부모에게 가는 글이 아니라 담임 기록이므로 쓰되, 표시로 구분합니다
+    // 학생이 교사에게만 털어놓은 글입니다. 근거로는 쓰되 문장을 그대로 옮기면 안 됩니다.
+    const mark = f==='hard' ? '[교사만 본 속마음 · 그대로 옮기지 말 것] ' : f==='counsel' ? '[상담] ' : '';
+    if(HT_WORDS.inter.test(t))    add('inter',    mark+cut(t),date);
+    if(HT_WORDS.role.test(t))     add('role',     mark+cut(t),date);
+    if(HT_WORDS.overcome.test(t)) add('overcome', mark+cut(t),date);
+  });
+  // 동아리·자율·진로 기록에 적힌 역할도 끌어옵니다
+  ['dongari','jayul','jinro'].forEach(k=>{
+    const r=recs({studentId:sid,area:k})[0]; if(!r) return;
+    ['role','act','coop'].forEach(f=>{ const v=String(r.fields?.[f]||'').trim();
+      if(v) add('role',`${AREAS[k].short} — ${cut(v)}`,''); });
+  });
+
+  /* ── 어려움 극복 ── 어려워한 과목을 이후에 더 붙잡았는가 */
+  const diffFirst={};
+  js.forEach(j=>(j.difficult||[]).forEach(d=>{ const k=d.subject;
+    if(k && !diffFirst[k]) diffFirst[k]={date:j.date,content:d.content}; }));
+  Object.entries(diffFirst).forEach(([sub,info])=>{
+    const mins=(from,to)=>js.filter(j=>j.date>=from&&j.date<to)
+      .reduce((a,j)=>a+(j.subjects||[]).filter(x=>(x.group||x.name)===sub).reduce((p,q)=>p+(Number(q.minutes)||0),0),0);
+    const before=mins(addDays(info.date,-14),info.date), after=mins(info.date,addDays(info.date,15));
+    if(after>0 && after>=before*1.3 && after-before>=60)
+      add('overcome',`${sub}에서 "${cut(info.content,40)}" 부분을 어려워한 뒤, 2주간 그 과목 공부시간이 ${hm(before)}에서 ${ro(hm(after))} 늘어남`,info.date);
+  });
+  // 상담에서 한 약속이 실제로 지켜졌는가
+  cs.filter(c=>String(c.promise||'').trim()).slice(-3).forEach(c=>{
+    const aft=js.filter(j=>j.date>c.date&&j.date<=addDays(c.date,21));
+    const bef=js.filter(j=>j.date<=c.date&&j.date>addDays(c.date,-21));
+    const av=a=>a.length?Math.round(a.reduce((x,y)=>x+(Number(y.totalMinutes)||0),0)/a.length):0;
+    if(aft.length>=3 && bef.length>=3 && av(aft)>av(bef)*1.15)
+      add('overcome',`상담에서 "${cut(c.promise,36)}" 약속을 한 뒤, 3주간 일평균 공부시간이 ${hm(av(bef))}에서 ${ro(hm(av(aft)))} 늘어남`,c.date);
+    else if(aft.length>=3 && bef.length>=3)
+      add('overcome',`[교사 참고 · 문안에 쓰지 말 것] 상담 약속 "${cut(c.promise,36)}" 이후 일평균 ${hm(av(bef))} → ${hm(av(aft))}. 지켜졌는지 직접 확인 필요`,c.date);
+  });
+
+  /* ── 변화 ── 처음 4주와 최근 4주를 견줍니다 */
+  if(span>=35 && js.length>=10){
+    const e0=first, e1=addDays(first,28), l0=addDays(last,-27);
+    const early=js.filter(j=>j.date>=e0&&j.date<e1), late=js.filter(j=>j.date>=l0);
+    if(early.length>=3 && late.length>=3){
+      const av=(a,f)=>{const v=a.map(f).filter(x=>x>0); return v.length?v.reduce((x,y)=>x+y,0)/v.length:0;};
+      const m0=av(early,j=>Number(j.totalMinutes)||0), m1=av(late,j=>Number(j.totalMinutes)||0);
+      if(m0&&m1&&Math.abs(m1-m0)/m0>=0.2)
+        add('change',`하루 평균 공부시간이 초기 ${hm(Math.round(m0))}에서 최근 ${ro(hm(Math.round(m1)))} ${m1>m0?'늘어남':'줄어듦'}`,last);
+      const r0=Math.round(early.length/28*100), r1=Math.round(late.length/28*100);
+      if(Math.abs(r1-r0)>=15) add('change',`기록을 남긴 날의 비율이 초기 ${r0}퍼센트에서 최근 ${r1}퍼센트로 ${r1>r0?'올라감':'내려감'}`,last);
+      const f0=av(early,j=>Number(j.focus)||0), f1=av(late,j=>Number(j.focus)||0);
+      if(f0&&f1&&Math.abs(f1-f0)>=0.5)
+        add('change',`스스로 매긴 집중도가 ${f0.toFixed(1)}에서 ${f1.toFixed(1)}점으로 ${f1>f0?'올라감':'내려감'} (5점 기준)`,last);
+      const c0=av(early,j=>Number(j.mood)||0), c1=av(late,j=>Number(j.mood)||0);
+      if(c0&&c1&&Math.abs(c1-c0)>=0.5)
+        add('change',`컨디션이 ${c0.toFixed(1)}에서 ${c1.toFixed(1)}점으로 ${c1>c0?'좋아짐':'내려감'} (5점 기준)`,last);
+      const kinds=a=>new Set(a.flatMap(j=>(j.subjects||[]).map(x=>x.group||x.name))).size;
+      const k0=kinds(early), k1=kinds(late);
+      if(Math.abs(k1-k0)>=2) add('change',`공부한 과목 수가 ${k0}개에서 ${k1}개로 ${k1>k0?'늘어남':'줄어듦'}`,last);
+    }
+  }
+  const pf=s.profile||{};
+  if(String(pf.career||'').trim()) add('change',`스스로 적은 희망 진로 — ${cut(pf.career,40)}${pf.why?` (계기: ${cut(pf.why,50)})`:''}`,'');
+  if(String(pf.goal||'').trim()) add('change',`스스로 세운 목표 — ${cut(pf.goal,60)}`,'');
+
+  // 같은 문장이 여러 축에 겹쳐 들어가면 지저분해집니다
+  HT_AXES.forEach(a=>{ const seen=new Set();
+    ev[a.k]=ev[a.k].filter(x=>{ const k=x.text.slice(0,30); if(seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0,8); });
+  return ev;
+}
+const htCount = ev => HT_AXES.reduce((a,x)=>a+(ev[x.k]?.length||0),0);
+// 근거를 그 축의 입력칸에 넣을 문장으로
+const htText = list => (list||[]).map(x=>x.date?`(${x.date.slice(5)}) ${x.text}`:x.text).join('\n');
 
 function achieveCard(sid,mine){
   const g=studyStats(sid);
@@ -1054,6 +1292,11 @@ function seed(){
         memo:Math.random()<0.3?'집중이 잘 안 됐지만 계획한 분량은 끝냈다.':'',
         focus:Math.random()<0.8?[2,3,3,4,4,5][Math.floor(Math.random()*6)]:0,
         mood:Math.random()<0.85?(i===4?[1,2,2,3,3][Math.floor(Math.random()*5)]:[3,4,4,5,5,3][Math.floor(Math.random()*6)]):0,
+        tags:(()=>{ const r=Math.random();
+          if(r<0.25) return ['none'];
+          const pool=['help','helped','ask','speak','present','role','lead','finish','retry'];
+          const n=1+Math.floor(Math.random()*2);
+          return [...new Set([...Array(n)].map(()=>pool[Math.floor(Math.random()*pool.length)]))]; })(),
         good:Math.random()<0.3?['모둠 발표에서 먼저 정리해서 말했다.','미루던 오답 정리를 끝냈다.','짝이 모르는 문제를 설명해줬다.','아침에 늦지 않고 왔다.'][Math.floor(Math.random()*4)]:'',
         hard:(i===4&&Math.random()<0.35)?['조별 과제에서 의견이 안 맞아 답답했다.','계획대로 안 돼서 초조했다.'][Math.floor(Math.random()*2)]:'',
         seed:Math.random()<0.13?'조건부확률이 실제 의료 검사 정확도 해석에 어떻게 쓰이는지 궁금해져서 찾아봄':''});
@@ -1268,11 +1511,21 @@ async function callClaude(system,user,maxTokens,_retry,_noThink){
   return out;
 }
 function studentBlock(id,areaKey,anon){
-  const s=student(id), a=AREAS[areaKey], r=recs({studentId:id,area:areaKey})[0];
-  if(!r) return null;
+  const s=student(id), a=AREAS[areaKey];
+  let r=recs({studentId:id,area:areaKey})[0];
+  // 행특은 교사가 아무것도 안 적어도 자동으로 모인 근거로 만들 수 있게 합니다.
+  // 이 앱에 쌓이는 기록이 곧 담임의 관찰이기 때문입니다.
+  const ht = areaKey==='haengteuk' ? htEvidence(id) : null;
+  if(!r){
+    if(!ht || !htCount(ht)) return null;
+    r={studentId:id,area:areaKey,level:S.filter.batchLv||'B',target:a.bytes,meta:{},fields:{},text:'',status:'draft'};
+  }
   const who=anon?scode(s):`${s.name} (${scode(s)})`;
   const meta=(a.meta||[]).map(m=>r.meta?.[m.k]?`- ${m.label}: ${r.meta[m.k]}`:null).filter(Boolean);
-  const body=a.fields.map(f=>{const v=(r.fields?.[f.k]||'').trim(); return v?`- ${f.label}: ${v}`:null;}).filter(Boolean);
+  const body=a.fields.map(f=>{
+    let v=(r.fields?.[f.k]||'').trim();
+    if(!v && ht && ht[f.k]?.length) v=htText(ht[f.k]);   // 비어 있으면 자동 근거로
+    return v?`- ${f.label}: ${v}`:null;}).filter(Boolean);
   if(!body.length) return null;
   return `■ ${who}\n- 수준: ${r.level}\n- 목표 분량: ${r.target||a.bytes}byte\n${meta.join('\n')}${meta.length?'\n':''}${body.join('\n')}`;
 }
@@ -1346,6 +1599,10 @@ function briefContext(id,includeSensitive,days){
     `[학생 소감 메모]\n${memos.length?memos.map(d=>'- '+d).join('\n'):'- 없음'}`,
     `[공부 집중도] ${focAvg?`최근 ${focs.length}일 평균 ${focAvg} (5=푹 빠짐, 1=거의 못함)`:'기록 없음'}`,
     `[컨디션] ${moodAvg?`최근 ${moods.length}일 평균 ${moodAvg} (5=아주 좋음, 1=힘듦) / 낮음(2이하) ${moods.filter(m=>Number(m.mood)<=2).length}일`:'기록 없음'}`,
+    (()=>{ const tc=tagCount(js), ent=Object.entries(tc).sort((a,b)=>b[1]-a[1]);
+      return `[학생이 스스로 표시한 학교생활] ${ent.length
+        ? ent.map(([k,n])=>`${TAG_LABEL[k]} ${n}회`).join(', ')+` (${js.length}일 기록 중)`
+        : '표시한 것이 없음'}`; })(),
     `[학생이 적은 좋았던 일]\n${goods.length?goods.map(d=>'- '+d).join('\n'):'- 없음'}`,
     includeSensitive
       ? `[학생이 적은 힘들었던 일 — 교사 전용, 민감 정보]\n${hards.length?hards.map(d=>'- '+d).join('\n'):'- 없음'}`
@@ -2031,6 +2288,10 @@ function recordForm(s,areaKey){
   const floor=floorOf(r.level,tgt);            // 수준별 하한선
   const over=b>tgt, under=b>0&&b<floor, near=b>=floor&&b<=tgt;
   const hits=[...new Set([...checkBanned(Object.values(r.fields||{}).join(' ')),...checkBanned(txt,'output')])];
+  // 행특은 근거가 저절로 모입니다. 비어 있는 칸은 모인 근거로 미리 채워 보여줍니다.
+  const ht = areaKey==='haengteuk' ? htEvidence(s.id) : null;
+  const auto = k => (ht && HT_AXES.some(a=>a.k===k) && !String(r.fields?.[k]||'').trim()) ? htText(ht[k]) : '';
+  const autoUsed = ht ? HT_AXES.filter(a=>auto(a.k)).length : 0;
   return `<form id="recform" data-area="${areaKey}">
   <div class="grid g2" style="grid-template-columns:1.1fr 1fr;align-items:start">
     <div class="card">
@@ -2038,6 +2299,28 @@ function recordForm(s,areaKey){
         <span class="sub">${a.desc}</span>
         ${areaKey==='haengteuk'&&!isHomeroomOf(s)?`<span class="tag warn" style="margin-left:auto">담임이 작성하는 항목입니다</span>`:''}</div>
       <div class="card-b">
+        ${ht?`<div class="card mb" style="box-shadow:none;background:${htCount(ht)?'var(--accent-wash)':'var(--surface-2)'};
+          border-color:${htCount(ht)?'#c8ddd5':'var(--line)'}">
+          <div class="card-b" style="padding:12px 14px">
+            ${htCount(ht)?`<b class="small" style="color:var(--accent-ink)">근거 ${htCount(ht)}건이 저절로 모였습니다</b>
+              <div class="tiny muted mt-s" style="line-height:1.9">
+                ${esc(s.name)} 학생이 남긴 학습일지와 선생님의 상담 기록에서 뽑았습니다.
+                수치는 계산된 값이고, 따옴표 안은 학생이 직접 쓴 문장 그대로입니다. <b>없는 일은 만들지 않았습니다.</b>
+                빈 칸은 자동으로 채워 두었으니 사실과 다른 부분만 고치고 저장하세요.
+                근거가 없는 축은 비워 두는 편이 낫습니다.<br>
+                <b style="color:var(--warn)">[교사 참고]·[교사만 본 속마음] 표시가 붙은 줄은 판단 재료일 뿐입니다.</b>
+                그대로 문안에 들어가지 않도록 AI에도 일러두었지만, 완성된 문장은 꼭 눈으로 확인하세요.</div>
+              <div class="row mt-s" style="gap:6px;flex-wrap:wrap">
+                ${HT_AXES.map(x=>`<span class="tag ${ht[x.k].length?'on':''}" style="opacity:${ht[x.k].length?1:.5}">
+                  ${x.label} ${ht[x.k].length}</span>`).join('')}</div>
+              <div class="row mt-s" style="gap:6px;flex-wrap:wrap">
+                <button type="button" class="btn sm" data-act="htfillall">비어 있는 칸 모두 채우기</button>
+                <button type="button" class="btn sm ghost" data-act="htclear">자동으로 채운 것 지우기</button></div>`
+            :`<b class="small">아직 모인 근거가 없습니다</b>
+              <div class="tiny muted mt-s" style="line-height:1.9">
+                학생이 학습일지를 며칠 쓰고 상담 기록이 쌓이면 여기에 근거가 자동으로 모입니다.
+                지금은 직접 적어주세요.</div>`}
+          </div></div>`:''}
         <div class="grid g2" style="gap:0 12px">
           <label class="f"><span>기록 수준 <em>문체·판단 밀도</em></span>
             <select name="level">${LEVELS.map(l=>`<option ${r.level===l?'selected':''}>${l}</option>`).join('')}</select></label>
@@ -2047,8 +2330,15 @@ function recordForm(s,areaKey){
           m.type==='select'?`<select name="meta.${m.k}">${m.opts.map(o=>`<option ${r.meta?.[m.k]===o?'selected':''}>${o}</option>`).join('')}</select>`
           :`<input type="text" name="meta.${m.k}" value="${esc(r.meta?.[m.k]||'')}" placeholder="${esc(m.ph||'')}">`}</label>`).join('')}
         <div style="border-top:1px solid var(--line-2);margin:4px 0 16px"></div>
-        ${a.fields.map(f=>`<label class="f"><span>${f.label}</span>
-          <textarea name="fields.${f.k}" placeholder="${esc(f.ph)}" rows="3">${esc(r.fields?.[f.k]||'')}</textarea></label>`).join('')}
+        ${a.fields.map(f=>{ const av=auto(f.k), val=r.fields?.[f.k]||av;
+          const n=ht&&ht[f.k]?ht[f.k].length:0;
+          return `<label class="f"><span>${f.label}
+            ${av?`<em style="color:var(--accent-ink)">자동으로 모은 근거 ${n}건 — 확인하고 고쳐주세요</em>`
+               :(ht&&HT_AXES.some(x=>x.k===f.k)&&n?`<em>모인 근거 ${n}건</em>`:'')}</span>
+          <textarea name="fields.${f.k}" placeholder="${esc(f.ph)}" rows="${av?Math.min(8,Math.max(3,htText(ht[f.k]).split('\n').length+1)):3}"
+            style="${av?'background:var(--accent-wash);border-color:#c8ddd5':''}">${esc(val)}</textarea>
+          ${ht&&n&&String(r.fields?.[f.k]||'').trim()?`<button type="button" class="btn sm mt-s" data-act="htfill" data-k="${f.k}"
+            style="align-self:flex-start">모인 근거 ${n}건 아래에 붙이기</button>`:''}</label>`;}).join('')}
         ${hits.length?`<div class="card" style="border-color:#eddac9;background:var(--warn-wash);box-shadow:none">
           <div class="card-b" style="padding:11px 13px"><b class="small" style="color:var(--warn)">⚠ 기재 금지 항목이 감지되었습니다</b>
           <ul class="tiny" style="margin:6px 0 0;padding-left:17px;color:var(--warn);line-height:1.7">${hits.map(h=>`<li>${h}</li>`).join('')}</ul>
@@ -2058,7 +2348,13 @@ function recordForm(s,areaKey){
           <button type="button" class="btn ai" data-act="genrec">✦ 특기사항 생성</button>
           <button type="button" class="btn" data-act="copyprompt">프롬프트 복사</button>
         </div>
-        <div class="tiny muted mt-s">생성은 ${PROVIDERS[settings.provider].name} ${settings.model} 사용${settings.anon?' · 이름 대신 학번 코드로 전송':''}</div>
+        <div class="row tiny muted mt-s" style="gap:7px;flex-wrap:wrap;align-items:center">
+          <span>생성에 쓸 AI</span>
+          <span class="tag" style="font-size:12.5px">${esc(PROVIDERS[settings.provider].name)}
+            <span class="mono" style="opacity:.75">${esc(settings.modelOf(settings.provider))}</span></span>
+          ${settings.key(settings.provider)?'':'<span class="tag warn" style="font-size:12.5px">API 키 없음</span>'}
+          <button type="button" class="btn ghost sm" data-act="nav" data-v="settings" style="padding:2px 8px">바꾸기</button>
+          ${settings.anon?'<span>· 이름 대신 학번 코드로 전송</span>':''}</div>
       </div></div>
     <div class="card">
       <div class="card-h"><h3>완성된 특기사항</h3><span class="sub">NEIS 등재 문안</span></div>
@@ -2301,6 +2597,7 @@ function panelReport(s){
     ${renderReport(s,d,note,false,advice,career)}`;
 }
 function renderReport(s,d,note,forParent,advice,career){
+  const tc=tagCount(d.js), tags=Object.entries(tc).sort((a,b)=>b[1]-a[1]);
   return `<div class="report">
     <h2>${esc(s.name)} 학습 리포트</h2>
     <div class="rmeta">${esc(S.school?.name||'')} ${curYear()}학년도 ${enrollOf(s,curYear())?.grade}학년 ${enrollOf(s,curYear())?.klass}반 ${enrollOf(s,curYear())?.number}번 ·
@@ -2327,6 +2624,10 @@ function renderReport(s,d,note,forParent,advice,career){
         <ul style="margin:0;padding-left:18px;line-height:1.9;font-size:13px">
         ${d.diffs.slice(0,12).map(x=>`<li><b>${esc(x.subject)}</b> ${esc(x.content)} <span class="tiny muted">${kdate(x.date)}</span></li>`).join('')}</ul>`
         :'<div class="small muted">기록 없음</div>'}</section>
+
+    ${tags.length?`<section><h4>스스로 표시한 학교생활</h4>
+      <div class="small muted mb-s">매일 기록할 때 본인이 직접 고른 것입니다. 무엇을 자주 하는 학생인지 드러납니다.</div>
+      ${barList(tags.map(([k,n])=>[TAG_LABEL[k],n]),n=>`${n}회`)}</section>`:''}
 
     ${d.goods.length?`<section><h4>스스로 적은 좋았던 일</h4>
       <div class="small muted mb-s">본인이 그날 잘했다고 여긴 일입니다. 무엇을 뿌듯해하는지가 드러납니다.</div>
@@ -2407,7 +2708,9 @@ function viewJournal(){
 function viewExport(){
   const st=students(), area=S.area, a=AREAS[area];
   const withData=st.filter(s=>{const r=recs({studentId:s.id,area})[0];
-    return r&&Object.values(r.fields||{}).some(v=>String(v||'').trim());});
+    if(r&&Object.values(r.fields||{}).some(v=>String(v||'').trim())) return true;
+    return area==='haengteuk' && htCount(htEvidence(s.id))>0;   // 행특은 근거가 저절로 모입니다
+  });
   return `${topbar('내보내기','Claude 대화창에 붙여넣을 프롬프트를 만듭니다')}
   <div class="wrap">
     <div class="card mb"><div class="card-b">
@@ -2426,9 +2729,35 @@ function viewExport(){
           return `<label class="tag" style="cursor:${has?'pointer':'not-allowed'};padding:6px 11px;opacity:${has?1:.45}">
             <input type="checkbox" class="expsel" value="${s.id}" ${has?'checked':'disabled'} style="width:auto;margin-right:2px">
             ${esc(s.name)} <span class="mono" style="opacity:.6">${scode(s)}</span></label>`;}).join('')}</div>
-        <div class="row mt"><button class="btn pri" data-act="genexport">프롬프트 생성</button>
-          <button class="btn ai" data-act="genbatch">✦ 앱에서 한꺼번에 생성</button></div>
+        <div class="row mt" style="flex-wrap:wrap;align-items:center">
+          <button class="btn pri" data-act="genexport">프롬프트 생성</button>
+          <button class="btn ai" data-act="genbatch">✦ 앱에서 한꺼번에 생성</button>
+          <label class="row tiny muted" style="gap:6px;margin-left:auto">기록 수준이 없는 학생은
+            <select data-act="batchlv" style="width:auto;font-size:13.5px;padding:4px 8px">
+              ${LEVELS.map(l=>`<option ${ (S.filter.batchLv||'B')===l?'selected':''}>${l}</option>`).join('')}
+            </select> 로</label></div>
+        <div class="tiny muted mt-s">수준은 학생마다 이미 정해 둔 값이 우선입니다.
+          아직 안 정한 학생에게만 위 값이 쓰입니다 — 반 전체를 A로 쓰면 문체가 다 똑같아집니다.</div>
       </div></div>
+
+    ${(()=>{ const done=st.map(x=>({s:x,r:recs({studentId:x.id,area})[0]}))
+        .filter(x=>String(x.r?.text||'').trim());
+      const fin=done.filter(x=>x.r.status==='done').length;
+      return `<div class="card mb"><div class="card-h"><h3>완성된 문안 받기</h3>
+        <span class="sub" style="margin-left:auto">${done.length}명 작성됨${fin?` · 완료 ${fin}명`:''}</span></div>
+        <div class="card-b">
+          ${done.length?`<div class="tiny muted mb-s">
+            학생별로 저장된 ${a.name} 문안입니다. 엑셀로 받으면 NEIS에 학생 순서대로 붙여넣기 좋습니다.
+            바이트·문장 수도 함께 들어갑니다.</div>
+          <div class="row" style="gap:6px;flex-wrap:wrap">
+            <button class="btn pri sm" data-act="dlrecords" data-a="${area}">엑셀로 받기</button>
+            <button class="btn sm" data-act="dlrecordstxt" data-a="${area}">텍스트로 받기</button>
+            <button class="btn sm" data-act="dlall">다섯 영역 전부 엑셀로</button>
+          </div>`
+          :`<div class="empty" style="padding:16px 0"><b>아직 완성된 문안이 없습니다</b>
+            위에서 생성하거나, 학생 화면에서 하나씩 만들면 여기에 모입니다.</div>`}
+        </div></div>`; })()}
+
     <div id="exportout"></div></div>`;
 }
 function buildPrompt(areaKey,ids,anon){
@@ -2739,7 +3068,7 @@ function studentWeek(s){
   const wkStart=S.filter.week||wk(today());
   const wkEnd=addDays(wkStart,6);
   const j=C.journals.find(x=>x.studentId===s.id&&x.date===wkStart&&x.type==='weekly')
-    ||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',days:0};
+    ||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',days:0,tags:[]};
   const tot=(j.subjects||[]).reduce((a,b)=>a+(Number(b.minutes)||0),0);
   const weeks=[]; for(let i=0;i<8;i++) weeks.push(addDays(wk(today()),-7*i));
   return `${topbar('이번 주 학습일지', j.id?'이미 쓴 주입니다. 고치고 저장하면 덮어써집니다.':'한 주를 한 번에 기록합니다',
@@ -2788,13 +3117,15 @@ function studentWeek(s){
       <div style="border-top:1px solid var(--line-2);margin:22px 0 16px"></div>
       <div class="spread mb"><h3 style="font-size:15px">이번 주 학교생활은 어땠나요?</h3>
         <span class="tiny muted">전부 선택입니다</span></div>
+      ${tagPick(j.tags,true)}
+      <div style="height:18px"></div>
       <label class="f"><span>이번 주 컨디션</span>
         <div class="moodrow" id="moodrow">
           ${MOODS.map(([v,l])=>`<button type="button" class="moodbtn ${Number(j.mood)===v?'on':''}"
             data-act="setmood" data-v="${v}">${l}</button>`).join('')}</div>
         <input type="hidden" name="mood" id="moodval" value="${Number(j.mood)||0}"></label>
-      <label class="f"><span>좋았던 일 · 잘한 일</span>
-        <textarea name="good" rows="2" placeholder="작은 것도 괜찮습니다.">${esc(j.good||'')}</textarea></label>
+      <label class="f"><span>위에 고른 일, 어떤 일이었나요 <em>한 줄이면 충분합니다 · 선택</em></span>
+        <textarea name="good" rows="2" placeholder="없으면 비워두어도 됩니다.">${esc(j.good||'')}</textarea></label>
       <label class="f"><span>힘들었던 일 <em>선생님만 봅니다</em></span>
         <textarea name="hard" rows="2" placeholder="공부, 친구 관계, 몸 상태, 무엇이든 괜찮습니다.">${esc(j.hard||'')}</textarea></label>
       <label class="f" style="margin-bottom:8px"><span>이번 주 한 줄 <em>선택</em></span>
@@ -2805,7 +3136,7 @@ function studentWeek(s){
 
 function studentWrite(s){
   const date=S.filter.date||today();
-  const j=jrn({studentId:s.id}).find(x=>x.date===date)||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:''};
+  const j=jrn({studentId:s.id}).find(x=>x.date===date)||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',tags:[]};
   const tot=(j.subjects||[]).reduce((a,b)=>a+(Number(b.minutes)||0),0);
   const isToday=date===today();
   const g=studyStats(s.id);
@@ -2855,6 +3186,9 @@ function studentWrite(s){
       <div class="spread mb"><h3 style="font-size:15px">오늘 학교생활은 어땠나요?</h3>
         <span class="tiny muted">전부 선택입니다</span></div>
 
+      ${tagPick(j.tags,false)}
+      <div style="height:18px"></div>
+
       <label class="f"><span>오늘 컨디션</span>
         <div class="moodrow" id="moodrow">
           ${MOODS.map(([v,l])=>`<button type="button" class="moodbtn ${Number(j.mood)===v?'on':''}"
@@ -2862,9 +3196,11 @@ function studentWrite(s){
         </div>
         <input type="hidden" name="mood" id="moodval" value="${Number(j.mood)||0}"></label>
 
-      <label class="f"><span>좋았던 일 · 잘한 일</span>
-        <textarea name="good" rows="2" placeholder="작은 것도 괜찮습니다. 발표를 해봤다, 친구를 도왔다, 미루던 걸 끝냈다 같은 것들.">${esc(j.good||'')}</textarea></label>
-      <div class="tiny muted" style="line-height:1.7;margin-top:-6px">여기 쓴 내용은 선생님이 <b>행동특성 기록</b>과 상담에 참고합니다.</div>
+      <label class="f"><span>위에 고른 일, 어떤 일이었나요 <em>한 줄이면 충분합니다 · 선택</em></span>
+        <textarea name="good" rows="2" placeholder="${(j.tags||[]).length&&!(j.tags||[]).includes('none')
+          ? esc('예) '+TAG_LABEL[(j.tags||[]).filter(k=>k!=='none')[0]]+' — 누구와, 무슨 일로')
+          : '없으면 비워두어도 됩니다.'}">${esc(j.good||'')}</textarea></label>
+      <div class="tiny muted" style="line-height:1.7;margin-top:-6px">한 줄까지 적어두면 선생님이 <b>행동특성 기록</b>을 쓸 때 그대로 근거가 됩니다.</div>
 
       <label class="f mt"><span>힘들었던 일 <em>선생님만 봅니다</em></span>
         <textarea name="hard" rows="2" placeholder="공부, 친구 관계, 몸 상태, 무엇이든 괜찮습니다. 쓰기 어려우면 비워두어도 됩니다.">${esc(j.hard||'')}</textarea></label>
@@ -2879,6 +3215,17 @@ function studentWrite(s){
       <button type="button" class="btn pri wide mt" data-act="savejournal">${j.id?'수정 저장':'학습일지 저장'}</button>
     </div></div></form></div>`;
 }
+const tagPick = (sel,weekly)=>`
+  <div class="spread mb-s"><h3 style="font-size:15px">${weekly?'이번 주':'오늘'} 학교에서 이런 일 있었나요?</h3>
+    <span class="tiny muted">해당되는 것을 다 눌러주세요</span></div>
+  <div class="tagpick" id="tagrow">
+    ${LIFE_TAGS.map(t=>`<button type="button" class="tagbtn ${t.k==='none'?'none':''} ${(sel||[]).includes(t.k)?'on':''}"
+      data-act="ttag" data-k="${t.k}">${t.label}</button>`).join('')}
+  </div>
+  <input type="hidden" name="tags" id="tagval" value="${esc((sel||[]).join(','))}">
+  <div class="tiny muted mt-s" style="line-height:1.8">
+    누르기만 해도 기록이 됩니다. 아래 한 줄은 안 써도 괜찮습니다.</div>`;
+
 const subRow=(x={})=>{ const m=Number(x.minutes)||0;
   return `<div class="subrow">
   <select class="jsub-g">${['',...SUBJECT_GROUPS].map(g=>
@@ -3202,6 +3549,17 @@ function handle(act,el){
       리포트는 만든 시점의 내용으로 고정되며, 이후 데이터가 바뀌어도 갱신되지 않습니다.
       생기부 초안 문안과 다른 학생 정보는 포함되지 않습니다.</div></div>`,
       `<button class="btn pri" data-act="copyurl" data-url="${esc(url)}">링크 복사</button>`); }); },
+  /* 완성된 문안 내려받기 — 학생별로 저장된 것을 한 파일로 */
+  dlrecords(){ busy(el,async()=>{ await dumpRecords([el.dataset.a]); }); },
+  dlall(){ busy(el,async()=>{ await dumpRecords(AREA_KEYS); }); },
+  dlrecordstxt(){ const k=el.dataset.a, a=AREAS[k];
+    const rows=students().map(s=>({s,r:recs({studentId:s.id,area:k})[0]}))
+      .filter(x=>String(x.r?.text||'').trim());
+    if(!rows.length){ toast('내려받을 문안이 없습니다'); return; }
+    const txt=rows.map(({s,r})=>
+      `■ ${scode(s)} ${s.name}  (${bytes(r.text).toLocaleString()}byte · ${sentCount(r.text)}문장 · ${r.status==='done'?'완료':'작성중'})\n${r.text}`
+    ).join('\n\n');
+    download(`${S.school?.name||'기록실'}_${a.short}_${curYear()}_${today()}.txt`,txt); },
   copyurl(){ copy(el.dataset.url); },
   copysid(){ copy(S.school.id); },
   copytcode(){ copy(S.school.teacherCode); },
@@ -3249,6 +3607,14 @@ function handle(act,el){
     $$('[data-act=setdays]').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); },
   saveweek(){ busy(el,saveWeek); },
   saveprofile(){ busy(el,saveProfile); },
+  /* 학교생활 태그 고르기 — "별일 없었다"는 나머지와 함께 켜지지 않습니다 */
+  ttag(){ const k=el.dataset.k, box=$('#tagval');
+    let cur=(box.value||'').split(',').filter(Boolean);
+    if(cur.includes(k)) cur=cur.filter(x=>x!==k);
+    else if(k==='none') cur=['none'];
+    else cur=[...cur.filter(x=>x!=='none'), k];
+    box.value=cur.join(',');
+    $$('#tagrow .tagbtn').forEach(b=>b.classList.toggle('on',cur.includes(b.dataset.k))); },
   pwainstall(){ if(!PWA.prompt) return; PWA.prompt.prompt();
     PWA.prompt.userChoice.finally(()=>{ PWA.prompt=null; render(); }); },
   pwadismiss(){ LS.set('gs.nopwa','1'); render(); },
@@ -3262,6 +3628,20 @@ function handle(act,el){
     if(!next.includes(S.tab)) S.tab='journal';
     render(); },
   sortby(){ S.filter.sort=el.value; render(); },
+  batchlv(){ S.filter.batchLv=el.value; },
+  /* 행특 근거 채우기 — 화면에서만 채웁니다. 저장을 눌러야 실제로 저장됩니다. */
+  htfill(){ const ev=htEvidence(S.sel), k=el.dataset.k;
+    const ta=$(`[name="fields.${k}"]`); if(!ta) return;
+    const add=htText(ev[k]); if(!add){ toast('모인 근거가 없습니다'); return; }
+    ta.value = ta.value.trim() ? ta.value.trim()+'\n'+add : add;
+    toast(`${HT_AXES.find(x=>x.k===k)?.label} 근거 ${ev[k].length}건을 넣었습니다. 저장을 눌러야 반영됩니다.`,3800); },
+  htfillall(){ const ev=htEvidence(S.sel); let n=0;
+    HT_AXES.forEach(a=>{ const ta=$(`[name="fields.${a.k}"]`); if(!ta||ta.value.trim()) return;
+      const t=htText(ev[a.k]); if(t){ ta.value=t; n++; } });
+    toast(n?`빈 칸 ${n}곳을 채웠습니다. 확인하고 저장하세요.`:'채울 빈 칸이 없습니다',3800); },
+  htclear(){ HT_AXES.forEach(a=>{ const ta=$(`[name="fields.${a.k}"]`);
+      if(ta && ta.style.background) ta.value=''; });
+    toast('자동으로 채운 내용을 지웠습니다'); },
   copynag(){ copy(el.dataset.t); },
   setmood(){ const v=el.dataset.v;
     $('#moodval').value = $('#moodval').value===v ? '0' : v;   // 다시 누르면 해제
@@ -3294,7 +3674,16 @@ function handle(act,el){
       const s=student(id);
       $('#batchlog').insertAdjacentHTML('beforeend',`<div class="small" id="b-${id}">· ${esc(s.name)} 생성 중…</div>`);
       try{ const out=await genRecord(id,S.area);
-        const r=recs({studentId:id,area:S.area})[0]; r.text=out; await DB.put('records',r);
+        const a=AREAS[S.area];
+        const r=recs({studentId:id,area:S.area})[0]
+          || {studentId:id,area:S.area,year:curYear(),level:S.filter.batchLv||'B',
+              target:a.bytes,meta:{},fields:{},status:'draft'};
+        // 행특은 자동으로 모인 근거로 만들었으므로, 그 근거도 함께 남겨 둡니다
+        if(S.area==='haengteuk' && !Object.values(r.fields||{}).some(v=>String(v||'').trim())){
+          const ev=htEvidence(id); r.fields={...(r.fields||{})};
+          HT_AXES.forEach(x=>{ const t=htText(ev[x.k]); if(t) r.fields[x.k]=t; });
+        }
+        r.text=out; await DB.put('records',r);
         $('#b-'+id).innerHTML=`<span style="color:#3f7a34">✓</span> ${esc(s.name)} · ${bytes(out).toLocaleString()}byte · ${sentCount(out)}문장`; ok++;
       }catch(e){ $('#b-'+id).innerHTML=`<span style="color:var(--danger)">✗</span> ${esc(s.name)} · ${esc(e.message)}`; fail++;
         if(e.nokey) break; }
@@ -3702,7 +4091,8 @@ async function saveWeek(){
   const difficult=$$('#diffs .diffrow').map(r=>({subject:r.querySelector('.jdif-s').value.trim(),
     content:r.querySelector('.jdif-c').value.trim()})).filter(x=>x.content);
   const days=Number($('#daysval')?.value)||0;
-  const any = subs.length||days||Number($('#moodval')?.value)||Number($('#focusval')?.value)
+  const tags=($('#tagval')?.value||'').split(',').filter(Boolean);
+  const any = subs.length||days||Number($('#moodval')?.value)||Number($('#focusval')?.value)||tags.length
     ||$('[name=good]')?.value.trim()||$('[name=hard]')?.value.trim()||$('[name=memo]')?.value.trim();
   if(!any){ toast('공부 기록이나 학교생활 내용 중 하나는 채워주세요'); return; }
   const same=C.journals.filter(x=>x.studentId===s.id&&x.date===wkStart&&x.type==='weekly')
@@ -3712,7 +4102,7 @@ async function saveWeek(){
     subjects:subs,totalMinutes:subs.reduce((a,b)=>a+b.minutes,0),days,difficult,
     memo:$('[name=memo]').value.trim(),seed:$('[name=seed]').value.trim(),
     mood:Number($('#moodval')?.value)||0, focus:Number($('#focusval')?.value)||0,
-    good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||''});
+    good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||'', tags});
   toast('주간 일지를 저장했습니다'); S.view='mine'; S.filter.week=null; render();
 }
 
@@ -3723,8 +4113,9 @@ async function saveJournal(){
     const g=r.querySelector('.jsub-g').value, nm=r.querySelector('.jsub-n').value.trim();
     return {group:g, name:nm||g, minutes:h*60+mm};
   }).filter(x=>x.group&&x.minutes>0);
+  const tags=($('#tagval')?.value||'').split(',').filter(Boolean);
   const anyLife = (Number($('#moodval')?.value)||0) || (Number($('#focusval')?.value)||0) || $('[name=good]')?.value.trim()
-                  || $('[name=hard]')?.value.trim() || $('[name=memo]')?.value.trim();
+                  || $('[name=hard]')?.value.trim() || $('[name=memo]')?.value.trim() || tags.length;
   if(!subs.length && !anyLife){ toast('공부 기록이나 학교생활 내용 중 하나는 채워주세요'); return; }
   const difficult=$$('#diffs .diffrow').map(r=>({subject:r.querySelector('.jdif-s').value.trim(),
     content:r.querySelector('.jdif-c').value.trim()})).filter(x=>x.content);
@@ -3737,7 +4128,7 @@ async function saveJournal(){
     totalMinutes:subs.reduce((a,b)=>a+b.minutes,0),difficult,
     memo:$('[name=memo]').value.trim(),seed:$('[name=seed]').value.trim(),
     mood:Number($('#moodval')?.value)||0, focus:Number($('#focusval')?.value)||0,
-    good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||''});
+    good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||'', tags});
   toast('학습일지를 저장했습니다'); S.view='mine'; S.filter.date=null; render();
 }
 
