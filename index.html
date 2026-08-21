@@ -373,7 +373,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.18.1148"></script>
+<script src="skills.js?v=2026.08.21.2"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -426,7 +426,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.21.0910';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.21.2';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -2186,8 +2186,10 @@ function sortStudents(list){
 }
 
 function viewStudents(){
-  if(!students().length) return viewDash();
+  const none=!students().length;
   const st=sortStudents(pickedStudents()), cls=classList(), home=S.me?.homeroom;
+  // 새로 배정된 빈 반의 담임도 이 화면에서 첫 학생을 바로 등록할 수 있어야 합니다.
+  const showTools=S.showTools||none;
   return `${topbar('학생', `${curYear()}학년도 · ${klassLabel(S.filter.klass)} ${st.length}명`,
     `${scopeToggle()}
      ${cls.length>1?`<select data-act="pickklass" style="width:auto">
@@ -2198,9 +2200,9 @@ function viewStudents(){
         ${SORTS.map(([v,l])=>`<option value="${v}" ${(S.filter.sort||'')===v?'selected':''}>${l}</option>`).join('')}
       </select>
      <button class="btn sm" data-act="codemenu" ${st.length?'':'disabled'}>접속코드</button>
-     <button class="btn sm ${S.showTools?'pri':''}" data-act="toolopen">명단 · 엑셀 관리</button>`)}
+     <button class="btn sm ${showTools?'pri':''}" data-act="toolopen">${none?'학생 등록':'명단 · 엑셀 관리'}</button>`)}
   <div class="wrap">
-    ${S.showTools?studentAdminCard()+excelCard():''}
+    ${showTools?studentAdminCard()+excelCard():''}
     <div class="card">
       <div class="card-h"><h3>기록 현황표</h3><span class="sub" style="margin-left:auto">
         <span class="dot on"></span> 오늘 작성 <span style="margin-right:8px"></span>
