@@ -373,7 +373,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.21.3"></script>
+<script src="skills.js?v=2026.08.21.4"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -426,7 +426,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.21.3';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.21.4';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -1537,6 +1537,19 @@ async function genRecord(id,areaKey){
   const out=await callClaude(sys,`아래 학생의 ${a.name} 특기사항을 작성해줘.\n\n${block}`,6000);
   return out.split(/\n\s*---/)[0].trim();
 }
+// AI가 자료 부족을 설명하는 상투문을 붙이더라도 학부모 리포트에는 남기지 않습니다.
+function cleanReportComment(text){
+  const meta=[
+    /기록.{0,40}(?:데이터|자료).{0,12}(?:적|부족)/,
+    /(?:파악|판단)하기(?:에는)?\s*이르/,
+    /기록이\s*(?:더\s*)?(?:쌓|누적)/,
+    /차츰\s*기록/,
+    /다각도로\s*(?:살펴|파악)/,
+    /더욱\s*(?:구체적으로|자세히)\s*(?:볼|살펴|파악)/
+  ];
+  const sentences=String(text||'').match(/[^.!?]+[.!?]?/g)||[];
+  return sentences.map(s=>s.trim()).filter(s=>s&&!meta.some(re=>re.test(s))).join(' ');
+}
 async function genReportText(id,days){
   const s=student(id);
   const out=await callClaude(window.GS_RULES.REPORT,
@@ -1544,7 +1557,7 @@ async function genReportText(id,days){
   const c=out.split(/\[담임 코멘트\]/)[1]||out;
   const [comment,rest]=c.split(/\[앞으로의 학습 방향\]/);
   const [adviceRaw,careerRaw]=(rest||'').split(/\[진로 연계 안내\]/);
-  return { comment:(comment||'').trim(),
+  return { comment:cleanReportComment(comment),
            advice:(adviceRaw||'').trim().split('\n').map(l=>l.replace(/^\s*\d+[.)]\s*/,'').trim()).filter(Boolean),
            career:(careerRaw||'').trim().split('\n').map(l=>l.trim()).filter(Boolean) };
 }
