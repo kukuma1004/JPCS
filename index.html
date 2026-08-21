@@ -373,7 +373,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.21.2"></script>
+<script src="skills.js?v=2026.08.21.3"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -426,7 +426,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.21.2';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.21.3';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -2582,8 +2582,8 @@ function panelReport(s){
       <span class="tiny muted" style="margin-left:auto">생기부 초안 문안은 리포트에 포함되지 않습니다</span></div>
     <div class="card mb noprint"><div class="card-b" style="padding:14px">
       <div class="grid g2" style="gap:0 14px">
-        <label class="f" style="margin-bottom:8px"><span>담임 코멘트 <em>리포트 아래쪽에 들어갑니다</em></span>
-          <textarea id="rnote" rows="5" placeholder="AI로 초안을 만든 뒤 손보시거나, 직접 쓰셔도 됩니다.">${esc(note)}</textarea></label>
+        <label class="f" style="margin-bottom:8px"><span>담임 코멘트 <em>학교생활을 전하는 핵심 내용입니다</em></span>
+          <textarea id="rnote" rows="7" placeholder="학교에서의 학습 태도와 친구 관계, 학교생활을 중심으로 작성합니다.">${esc(note)}</textarea></label>
         <label class="f" style="margin-bottom:8px"><span>앞으로의 학습 방향 <em>한 줄에 하나씩</em></span>
           <textarea id="radvice" rows="5" placeholder="오답 중 조건부확률 문제만 따로 모아 주 2회 다시 풀어보기">${esc(advice.join('\n'))}</textarea></label>
       </div>
@@ -2595,7 +2595,6 @@ function panelReport(s){
     ${renderReport(s,d,note,false,advice,career)}`;
 }
 function renderReport(s,d,note,forParent,advice,career){
-  const tc=tagCount(d.js), tags=Object.entries(tc).sort((a,b)=>b[1]-a[1]);
   return `<div class="report">
     <h2>${esc(s.name)} 학습 리포트</h2>
     <div class="rmeta">${esc(S.school?.name||'')} ${curYear()}학년도 ${enrollOf(s,curYear())?.grade}학년 ${enrollOf(s,curYear())?.klass}반 ${enrollOf(s,curYear())?.number}번 ·
@@ -2617,25 +2616,7 @@ function renderReport(s,d,note,forParent,advice,career){
     <section><h4>과목별 공부 시간</h4>
       ${Object.keys(d.bySub).length?barList(Object.entries(d.bySub).sort((a,b)=>b[1]-a[1]),hm):'<div class="small muted">기록 없음</div>'}</section>
 
-    <section><h4>스스로 어려워한 내용</h4>
-      ${d.diffs.length?`<div class="small muted mb-s">본인이 직접 적은 내용입니다. 무엇을 도와주면 좋을지 알려주는 단서입니다.</div>
-        <ul style="margin:0;padding-left:18px;line-height:1.9;font-size:13px">
-        ${d.diffs.slice(0,12).map(x=>`<li><b>${esc(x.subject)}</b> ${esc(x.content)} <span class="tiny muted">${kdate(x.date)}</span></li>`).join('')}</ul>`
-        :'<div class="small muted">기록 없음</div>'}</section>
-
-    ${tags.length?`<section><h4>스스로 표시한 학교생활</h4>
-      <div class="small muted mb-s">매일 기록할 때 본인이 직접 고른 것입니다. 무엇을 자주 하는 학생인지 드러납니다.</div>
-      ${barList(tags.map(([k,n])=>[TAG_LABEL[k],n]),n=>`${n}회`)}</section>`:''}
-
-    ${d.goods.length?`<section><h4>스스로 적은 좋았던 일</h4>
-      <div class="small muted mb-s">본인이 그날 잘했다고 여긴 일입니다. 무엇을 뿌듯해하는지가 드러납니다.</div>
-      <ul style="margin:0;padding-left:18px;line-height:1.9;font-size:13px">
-      ${d.goods.slice(0,8).map(x=>`<li>${esc(x.good)} <span class="tiny muted">${kdate(x.date)}</span></li>`).join('')}</ul></section>`:''}
-
-    ${d.seeds.length?`<section><h4>스스로 궁금해한 것</h4>
-      <div class="small muted mb-s">공부하다 생긴 질문입니다. 탐구활동과 생활기록부 기재로 이어지는 재료가 됩니다.</div>
-      <ul style="margin:0;padding-left:18px;line-height:1.9;font-size:13px">
-      ${d.seeds.slice(0,8).map(x=>`<li>${esc(x.seed)} <span class="tiny muted">${kdate(x.date)}</span></li>`).join('')}</ul></section>`:''}
+    ${note?`<section><h4>담임 코멘트</h4><div class="small wrapline" style="line-height:1.95">${esc(note)}</div></section>`:''}
 
     ${(advice||[]).length?`<section><h4>앞으로의 학습 방향</h4>
       <div class="small muted mb-s">지금까지의 기록을 바탕으로 다음 한 달 동안 해보면 좋을 것들입니다.</div>
@@ -2647,8 +2628,6 @@ function renderReport(s,d,note,forParent,advice,career){
         진로를 정해주려는 것이 아니라, 함께 살펴볼 만한 갈래를 넓혀보려는 것입니다.</div>
       <ul style="margin:0;padding-left:18px;line-height:1.95;font-size:13px">
         ${career.map(x=>`<li style="margin-bottom:5px">${esc(x)}</li>`).join('')}</ul></section>`:''}
-
-    ${note?`<section><h4>담임 코멘트</h4><div class="small wrapline">${esc(note)}</div></section>`:''}
 
     <div class="rfoot">이 리포트는 학생이 직접 작성한 학습일지와 담임교사의 활동 기록을 바탕으로 만들어졌습니다.
       학생이 교사에게만 남긴 내용은 포함되지 않습니다.
