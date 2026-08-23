@@ -28,10 +28,11 @@
   --shadow:0 1px 2px rgba(43,40,32,.045), 0 1px 3px rgba(43,40,32,.035);
   --shadow-md:0 2px 4px rgba(43,40,32,.05), 0 6px 16px rgba(43,40,32,.07);
   --shadow-lg:0 12px 40px rgba(43,40,32,.14);
-  /* 이징 — 기본 CSS 이징은 약해서 직접 정의 */
-  --ease-out:cubic-bezier(.23,1,.32,1);
+  /* JP 모션 토큰 — 기록지는 빠르고 차분한 3/10 강도로 씁니다 */
+  --ease-out:cubic-bezier(.22,1,.36,1);
   --ease:cubic-bezier(.4,0,.2,1);
-  --dur-press:120ms; --dur-ui:170ms; --dur-panel:240ms;
+  --ease-soft:cubic-bezier(.2,.75,.25,1);
+  --dur-press:120ms; --dur-ui:180ms; --dur-panel:260ms; --dur-scene:320ms;
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -213,12 +214,19 @@ tbody tr:last-child td{border-bottom:0}
 .iconbtn:hover{background:var(--warn-wash);color:var(--warn);border-color:#eddac9}
 
 #toast{position:fixed;bottom:22px;left:50%;background:var(--ink);color:#fff;padding:12px 20px;
-  border-radius:var(--r-full);font-size:14.5px;z-index:200;pointer-events:none;max-width:88vw;text-align:center;
+  border-radius:var(--r-full);font-size:14.5px;z-index:200;pointer-events:none;max-width:88vw;text-align:left;
+  display:flex;align-items:center;gap:9px;
   box-shadow:var(--shadow-lg);
   opacity:0;transform:translateX(-50%) translateY(12px) scale(.97);
   transition:opacity 140ms var(--ease), transform 140ms var(--ease-out)}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0) scale(1);
   transition:opacity var(--dur-panel) var(--ease-out), transform var(--dur-panel) var(--ease-out)}
+#toast::before{display:none;flex:none;width:20px;height:20px;border-radius:50%;place-items:center;
+  font-size:13px;font-weight:800;line-height:1}
+#toast.success{background:#164b42}#toast.success::before{content:"✓";display:grid;background:#fff;color:#24675c;
+  animation:jpCheck var(--dur-panel) var(--ease-out) both}
+#toast.error{background:#7d302c}#toast.error::before{content:"!";display:grid;background:#fff;color:#a33a34}
+@keyframes jpCheck{0%{opacity:0;transform:scale(.55) rotate(-18deg)}70%{transform:scale(1.08) rotate(0)}100%{opacity:1;transform:scale(1)}}
 .tagpick{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .tagbtn{padding:9px 14px;border-radius:var(--r-full);border:1px solid var(--line);
   background:var(--surface);color:var(--ink-2);font-size:14.5px;font-weight:500;cursor:pointer;
@@ -299,16 +307,8 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
 /* 본문 가독 폭 — 긴 안내문이 화면 끝까지 늘어지지 않게 */
 .card-b>.tiny,.card-b>.small{max-width:74ch}
 
-/* 화면 전환: 아주 짧은 페이드. 클릭했다는 사실만 전달하고 끝 */
-.main>.wrap{animation:viewIn 200ms var(--ease-out)}
-@keyframes viewIn{from{opacity:0;transform:translateY(4px)}}
-
-/* 카드가 여러 장 들어오는 화면은 60ms 간격으로 순차 등장 */
-.grid>.card{animation:cardIn 260ms var(--ease-out) backwards}
-.grid>.card:nth-child(2){animation-delay:50ms}
-.grid>.card:nth-child(3){animation-delay:100ms}
-.grid>.card:nth-child(4){animation-delay:150ms}
-@keyframes cardIn{from{opacity:0;transform:translateY(6px)}}
+/* 화면·카드 진입은 JS가 현재 장면을 구분해 한 번만 재생합니다 */
+.main>.wrap,.grid>.card{animation:none}
 
 /* 진행 막대: 값이 바뀔 때만 부드럽게 */
 .meter i{transition:width var(--dur-panel) var(--ease-out)}
@@ -477,14 +477,75 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 .report section>h4{border-left:0;padding-left:0;color:var(--accent-ink);font-size:16px}
 .report section>h4::after{content:"";display:block;width:28px;height:2px;background:#efb96e;margin-top:6px;border-radius:2px}
 
+/* ══════════════════════════════════════════════════════════════════
+   JP 디자인 시스템 · 반응형 모션 UX
+   transform/opacity 중심, 180~320ms, 기록지 강도 3/10
+   ══════════════════════════════════════════════════════════════════ */
+.card{transition:border-color var(--dur-ui) var(--ease),box-shadow var(--dur-panel) var(--ease-soft),
+  background var(--dur-ui) var(--ease)}
+.stat .n{font-size:clamp(29px,2.2vw,38px)}
+.stat.compact .n{font-size:clamp(25px,1.9vw,33px);white-space:nowrap}
+.card:focus-within{border-color:#c6d9d3;box-shadow:0 1px 2px rgba(30,43,39,.04),0 12px 30px rgba(30,43,39,.075)}
+.btn{will-change:transform;transition:background var(--dur-ui) var(--ease),border-color var(--dur-ui) var(--ease),
+  color var(--dur-ui) var(--ease),box-shadow var(--dur-ui) var(--ease),transform var(--dur-press) var(--ease-out)}
+.btn.is-busy{cursor:progress;box-shadow:none!important}
+@media (hover:hover) and (pointer:fine){
+  .btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(30,43,39,.09)}
+  .btn.pri:not(:disabled):hover{box-shadow:0 7px 16px rgba(36,103,92,.22)}
+  .moment:hover{transform:translateX(2px)}
+}
+.btn:not(:disabled):active{transform:translateY(0) scale(.97);box-shadow:none}
+.moment,.tagbtn,.moodbtn,.mob button{transition:color var(--dur-ui) var(--ease),background var(--dur-ui) var(--ease),
+  border-color var(--dur-ui) var(--ease),box-shadow var(--dur-ui) var(--ease),transform var(--dur-press) var(--ease-out)}
+.nav.on::before{transform-origin:center;animation:jpSelectRail var(--dur-panel) var(--ease-out) both}
+.tab{position:relative;border-bottom-color:transparent!important}
+.tab.on::after{content:"";position:absolute;left:13px;right:13px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent);
+  transform-origin:left;animation:jpSelectLine var(--dur-panel) var(--ease-out) both}
+.mob button.on{animation:jpSelectSoft var(--dur-panel) var(--ease-out) both}
+@keyframes jpSelectRail{from{opacity:0;transform:scaleY(.3)}to{opacity:1;transform:scaleY(1)}}
+@keyframes jpSelectLine{from{opacity:.3;transform:scaleX(.25)}to{opacity:1;transform:scaleX(1)}}
+@keyframes jpSelectSoft{from{background:transparent;transform:translateY(1px)}to{background:var(--accent-wash);transform:none}}
+
+.jp-changed{animation:jpChanged 920ms var(--ease-out) both!important}
+@keyframes jpChanged{0%{box-shadow:0 0 0 0 rgba(36,103,92,.28);background:var(--accent-wash)}
+  45%{box-shadow:0 0 0 5px rgba(36,103,92,.08)}100%{box-shadow:var(--shadow);background:var(--surface)}}
+.jp-chart-line{stroke-dasharray:1;stroke-dashoffset:1;animation:jpDraw var(--dur-scene) var(--ease-out) forwards}
+.jp-chart-dot{opacity:0;animation:jpDot 180ms var(--ease-out) forwards;animation-delay:180ms}
+.jp-chart-bar{transform-box:fill-box;transform-origin:center bottom;animation:jpBar var(--dur-scene) var(--ease-out) both}
+.meter i{transform-origin:left;animation:jpMeter var(--dur-scene) var(--ease-out) both}
+@keyframes jpDraw{to{stroke-dashoffset:0}}@keyframes jpDot{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+@keyframes jpBar{from{opacity:.25;transform:scaleY(.12)}to{opacity:1;transform:scaleY(1)}}
+@keyframes jpMeter{from{transform:scaleX(.06);opacity:.35}to{transform:scaleX(1);opacity:1}}
+
+.jp-skeleton{position:relative;overflow:hidden;background:#e8e5dc;border-radius:10px;color:transparent!important}
+.jp-skeleton::after{content:"";position:absolute;inset:0;transform:translateX(-105%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.62),transparent);animation:jpShimmer 1.25s ease-in-out infinite}
+.jp-boot{min-height:100vh;display:grid;grid-template-columns:274px minmax(0,1fr);background:var(--paper)}
+.jp-boot-side{padding:28px 20px;background:linear-gradient(165deg,#183f39,#0d2a26)}
+.jp-boot-side .jp-skeleton{background:rgba(255,255,255,.13)}
+.jp-boot-main{padding:24px 28px}.jp-boot-top{height:56px;max-width:360px;margin-bottom:30px}
+.jp-boot-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.jp-boot-card{height:132px}
+.jp-boot-panel{height:310px;margin-top:16px}
+@keyframes jpShimmer{55%,100%{transform:translateX(105%)}}
+.empty{border:1px dashed var(--line);border-radius:14px;background:linear-gradient(145deg,var(--surface-2),rgba(255,255,255,.45))}
+
 @media (max-width:900px){
   .shell{grid-template-columns:1fr}.topbar{min-height:auto;padding:16px 17px}.topbar h1{font-size:23px}
   .wrap{padding:20px 15px 112px}.card{border-radius:16px}.card-h{padding:16px 17px}.card-b{padding:17px}
-  .tabs{margin:0 10px}.stat{min-height:116px;padding:18px}.stat .n{font-size:31px}
+  .tabs{margin:0 10px}.stat{min-height:116px;padding:18px}.stat .n{font-size:clamp(26px,7.2vw,31px)}
+  .stat.compact .n{font-size:clamp(21px,5.7vw,25px)}
   .mob{left:10px;right:10px;bottom:10px;border:1px solid rgba(121,128,121,.22);border-radius:18px;
     background:rgba(255,254,250,.94);box-shadow:0 14px 38px rgba(30,43,39,.16);backdrop-filter:blur(16px);
     padding:6px 5px calc(6px + env(safe-area-inset-bottom))}
   .mob button.on{border-radius:12px}.moment{grid-template-columns:64px minmax(0,1fr)}.moment time{display:none}
+  .jp-boot{grid-template-columns:1fr}.jp-boot-side{display:none}.jp-boot-main{padding:20px 15px}
+  .jp-boot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.jp-boot-card{height:112px}
+  .record-table{min-width:720px}
+  #toast{bottom:92px;width:max-content;max-width:calc(100vw - 30px)}
+}
+@media (max-width:640px){
+  .topbar>.grow{flex:1 0 100%}
+  .topbar{column-gap:8px;row-gap:10px}
 }
 @media print{
   body{background:#fff}.card,.report{box-shadow:none}.report{border-radius:0}.report section>h4::after{display:none}
@@ -492,7 +553,14 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 </style>
 </head>
 <body>
-<div id="app"><div class="auth"><div class="box"><div class="empty">불러오는 중…</div></div></div></div>
+<div id="app"><div class="jp-boot" aria-busy="true" aria-label="기록실을 불러오는 중">
+  <aside class="jp-boot-side"><div class="jp-skeleton" style="width:148px;height:34px;margin-bottom:38px"></div>
+    <div class="jp-skeleton" style="height:42px;margin-bottom:9px"></div><div class="jp-skeleton" style="height:42px;margin-bottom:9px"></div>
+    <div class="jp-skeleton" style="height:42px;width:78%"></div></aside>
+  <main class="jp-boot-main"><div class="jp-skeleton jp-boot-top"></div><div class="jp-boot-grid">
+    <div class="jp-skeleton jp-boot-card"></div><div class="jp-skeleton jp-boot-card"></div>
+    <div class="jp-skeleton jp-boot-card"></div><div class="jp-skeleton jp-boot-card"></div></div>
+    <div class="jp-skeleton jp-boot-panel"></div></main></div></div>
 <div id="toast"></div>
 <div id="modalroot"></div>
 <datalist id="subjlist">
@@ -502,7 +570,7 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.23.1"></script>
+<script src="skills.js?v=2026.08.23.2"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -555,7 +623,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.23.1';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.23.2';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -742,7 +810,17 @@ const linkOf   = s => appUrl()+'?c='+encodeURIComponent(s.accessCode||'');
 // 지금 보고 있는 학년도 기준 학번 (진급하면 학번이 바뀌므로)
 const scode = s => enrollOf(s,curYear())?.code || s.code || '';
 
-function toast(msg,ms){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),ms||2400); }
+let jpChangedPending=null;
+function toast(msg,ms,type){
+  const t=$('#toast'), text=String(msg||'');
+  const bad=/못|실패|오류|잘못|막혀|없습니다|확인해주세요|error|failed/i.test(text);
+  const good=!bad && /저장|등록|완료|생성|불러왔|바꿨|설정|발급|내려받|복사|정리|초기화|설치|정상/.test(text);
+  const kind=type||(bad?'error':good?'success':'info');
+  t.textContent=text; t.className=kind; t.setAttribute('role',kind==='error'?'alert':'status');
+  // 같은 종류의 알림이 연달아 와도 체크 모션이 다시 시작되게 합니다.
+  void t.offsetWidth; t.classList.add('on');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),ms||2400);
+}
 function copy(text){ navigator.clipboard?.writeText(text).then(()=>toast('클립보드에 복사했습니다')).catch(()=>toast('복사하지 못했습니다. 직접 선택해 복사해주세요')); }
 function download(name,text){ const b=new Blob([text],{type:'text/plain;charset=utf-8'}),u=URL.createObjectURL(b);
   const a=document.createElement('a'); a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u); toast('파일을 내려받았습니다'); }
@@ -1001,6 +1079,7 @@ const DB = {
     if(this.cloud){ const {doc,setDoc}=FB.fs;
       await setDoc(doc(FB.db,'schools',S.school.id,col,obj.id), clean(obj), {merge:true}); }
     else this._localSave();
+    jpChangedPending={col,id:obj.id};
     return obj;
   },
   async del(col,id){
@@ -1768,16 +1847,89 @@ function briefContext(id,includeSensitive,days){
   ].join('\n\n');
 }
 
+/* ═════════════ JP 모션 런타임 ═════════════
+   화면을 다시 그리는 기존 구조는 유지하고, 그 전후 위치만 비교합니다.
+   Firebase 문서·필드·저장 순서에는 관여하지 않습니다. */
+const JP_MOTION={
+  lastScene:'',
+  reduced(){ return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; },
+  scene(){ return [S.share?'share':'app',S.mode||'auth',S.me?.role||'',S.auth||'',S.view||'',S.sel||'',S.tab||''].join('|'); },
+  capture(){
+    const out=new Map();
+    document.querySelectorAll('[data-motion-key]').forEach(el=>{
+      if(el.getClientRects().length) out.set(el.dataset.motionKey,el.getBoundingClientRect());
+    });
+    return out;
+  },
+  count(card){
+    const el=card.querySelector('.n'), target=Number(card.dataset.count);
+    if(!el||!Number.isFinite(target)||target===0) return;
+    const node=[...el.childNodes].find(n=>n.nodeType===Node.TEXT_NODE&&/-?\d/.test(n.data));
+    if(!node) return;
+    const original=node.data, m=original.match(/-?\d+(?:\.\d+)?/); if(!m) return;
+    const decimals=(m[0].split('.')[1]||'').length, prefix=original.slice(0,m.index), suffix=original.slice(m.index+m[0].length);
+    const started=performance.now(), duration=320;
+    const tick=now=>{ const p=Math.min(1,(now-started)/duration), eased=1-Math.pow(1-p,3);
+      const value=target*eased; node.data=prefix+(decimals?value.toFixed(decimals):Math.round(value).toLocaleString('ko-KR'))+suffix;
+      if(p<1) requestAnimationFrame(tick); else node.data=original; };
+    requestAnimationFrame(tick);
+  },
+  added(el){
+    if(!el||this.reduced()||!el.animate) return;
+    el.animate([{opacity:0,transform:'translateY(-5px) scale(.99)'},{opacity:1,transform:'none'}],
+      {duration:240,easing:'cubic-bezier(.22,1,.36,1)'});
+  },
+  after(previous,sceneChanged){
+    if(sceneChanged) window.scrollTo({top:0,left:0,behavior:'instant'});
+    requestAnimationFrame(()=>{
+      if(this.reduced()){ jpChangedPending=null; return; }
+
+      if(sceneChanged){
+        const lead=document.querySelector('.topbar .grow,.auth .box>div:first-child');
+        lead?.animate?.([{opacity:0,transform:'translateY(4px)'},{opacity:1,transform:'none'}],
+          {duration:220,easing:'cubic-bezier(.22,1,.36,1)'});
+        const cards=[...document.querySelectorAll(
+          '#app .main>.wrap>.card,#app .main>.wrap>.grid>.card,#app .auth .box>.card,#app .auth .gatecard')]
+          .filter(el=>el.getClientRects().length).slice(0,10);
+        cards.forEach((el,i)=>el.animate?.(
+          [{opacity:0,transform:'translateY(8px)'},{opacity:1,transform:'none'}],
+          {duration:260,delay:Math.min(i,6)*36,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'}));
+        document.querySelectorAll('.stat[data-count]').forEach(card=>this.count(card));
+      }else{
+        document.querySelectorAll('[data-motion-key]').forEach(el=>{
+          const old=previous.get(el.dataset.motionKey); if(!old||!el.getClientRects().length) return;
+          const now=el.getBoundingClientRect(), dx=old.left-now.left, dy=old.top-now.top;
+          if(Math.abs(dx)+Math.abs(dy)<2) return;
+          el.animate?.([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],
+            {duration:260,easing:'cubic-bezier(.22,1,.36,1)'});
+        });
+      }
+
+      if(jpChangedPending){
+        const key=`${jpChangedPending.col}-${jpChangedPending.id}`;
+        const exact=[...document.querySelectorAll('[data-motion-key]')].find(el=>el.dataset.motionKey===key);
+        const target=exact||document.querySelector('.main .wrap .card:not(.stat),.auth .box .card');
+        if(target){ target.classList.remove('jp-changed'); void target.offsetWidth; target.classList.add('jp-changed');
+          setTimeout(()=>target.classList.remove('jp-changed'),1000); }
+        jpChangedPending=null;
+      }
+    });
+  }
+};
+
 /* ═════════════ 렌더 ═════════════ */
 function render(){
   applyFontSize();
-  const app=$('#app');
-  if(S.share){ app.innerHTML=viewShare(); bind(); return; }
-  if(!S.mode){ app.innerHTML=viewAuth(); bind(); return; }
-  app.innerHTML = S.me.role==='student' ? shellStudent()
-                : (S.isHost && !S.school) ? shellHost()
-                : shellTeacher();
+  const app=$('#app'), previous=JP_MOTION.capture(), scene=JP_MOTION.scene();
+  if(S.share) app.innerHTML=viewShare();
+  else if(!S.mode) app.innerHTML=viewAuth();
+  else app.innerHTML = S.me.role==='student' ? shellStudent()
+                     : (S.isHost && !S.school) ? shellHost()
+                     : shellTeacher();
   bind();
+  const changed=scene!==JP_MOTION.lastScene;
+  JP_MOTION.lastScene=scene;
+  JP_MOTION.after(previous,changed);
 }
 
 /* ── 인증 ── */
@@ -2269,7 +2421,7 @@ function viewDash(){
         ${lifeTop.length?`<div class="row mb" style="gap:7px;flex-wrap:wrap">${lifeTop.map(([k,n])=>
           `<span class="tag on">${esc(TAG_LABEL[k]||k)} <b>${n}</b></span>`).join('')}</div>`:''}
         ${lifeMoments.length?`<div class="moment-list">${lifeMoments.map(j=>{const s=student(j.studentId);return s?`
-          <button class="moment" data-act="open" data-id="${s.id}" data-tab="journal">
+          <button class="moment" data-motion-key="journals-${j.id}" data-act="open" data-id="${s.id}" data-tab="journal">
             <span class="moment-who">${esc(s.name)}</span><span>${esc(cut(j.good,86))}</span><time>${kdate(j.date)}</time>
           </button>`:'';}).join('')}</div>`
         :'<div class="tiny muted">아직 한 줄 기록은 없지만, 위 선택 기록부터 차곡차곡 모이고 있습니다.</div>'}
@@ -2374,14 +2526,14 @@ function viewStudents(){
      <button class="btn sm" data-act="codemenu" ${st.length?'':'disabled'}>접속코드</button>
      <button class="btn sm ${showTools?'pri':''}" data-act="toolopen">${none?'학생 등록':'명단 · 엑셀 관리'}</button>`)}
   <div class="wrap">
-    ${showTools?studentAdminCard()+excelCard():''}
+    ${showTools?`<div class="jp-expand">${studentAdminCard()+excelCard()}</div>`:''}
     <div class="card">
       <div class="card-h"><h3>기록 현황표</h3><span class="sub" style="margin-left:auto">
         <span class="dot on"></span> 오늘 작성 <span style="margin-right:8px"></span>
         <span class="pill" style="background:var(--accent)"></span> 완료
         <span class="pill" style="background:#fff;border:1px dashed var(--muted);margin-left:8px"></span> 작성중
         <span class="pill" style="background:var(--surface-2);border:1px solid var(--line);margin-left:8px"></span> 미작성</span></div>
-      ${st.length? `<div style="overflow-x:auto"><table>
+      ${st.length? `<div style="overflow-x:auto"><table class="record-table">
         <thead><tr><th style="width:140px">학생</th>
           ${areaKeys().map(k=>`<th style="text-align:center;width:74px"><span class="pill" style="background:${AREAS[k].hex}"></span> ${AREAS[k].short}</th>`).join('')}
           <th style="text-align:center;width:100px">최근 7일</th>
@@ -2392,7 +2544,7 @@ function viewStudents(){
           const tot=js.reduce((a,b)=>a+b.totalMinutes,0), cn=couns(s.id).length, g=studyStats(s.id);
           const wroteToday=C.journals.some(j=>j.studentId===s.id&&(s.logMode==='weekly'
             ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today()));
-          return `<tr>
+          return `<tr data-motion-key="students-${s.id}">
             <td><button class="btn ghost sm" data-act="open" data-id="${s.id}" style="padding:2px 4px">
               <span class="dot ${wroteToday?'on':''}" title="${wroteToday?'오늘 작성함':'오늘 아직 안 씀'}"></span>
               <b>${esc(s.name)}</b> <span class="muted tiny mono">${scode(s)}</span></button></td>
@@ -2464,7 +2616,7 @@ function recordForm(s,areaKey){
   const autoUsed = ht ? HT_AXES.filter(a=>auto(a.k)).length : 0;
   return `<form id="recform" data-area="${areaKey}">
   <div class="grid g2" style="grid-template-columns:1.1fr 1fr;align-items:start">
-    <div class="card">
+    <div class="card" data-motion-key="records-${r.id||areaKey}">
       <div class="card-h"><span class="areachip" style="color:${a.hex};border-color:${a.hex}33;background:${a.hex}11">${a.name}</span>
         <span class="sub">${a.desc}</span>
         ${areaKey==='haengteuk'&&!isHomeroomOf(s)?`<span class="tag warn" style="margin-left:auto">담임이 작성하는 항목입니다</span>`:''}</div>
@@ -2670,7 +2822,7 @@ function panelCounsel(s){
     ${rangeBox('c',[30,90,180,365],'상담 기간')}
     <div class="card"><div class="card-h"><h3>상담 이력</h3>
       <span class="sub">${shown.length}건${shown.length!==list.length?` / 전체 ${list.length}건`:''}</span></div>
-      <div class="card-b">${shown.length?shown.map(c=>`<div class="jlog">
+      <div class="card-b">${shown.length?shown.map(c=>`<div class="jlog" data-motion-key="counsels-${c.id}">
         <div class="spread"><span class="row" style="gap:6px"><b class="small">${kfull(c.date)}</b><span class="tag">${esc(c.kind)}</span></span>
           <button class="iconbtn" data-act="delcounsel" data-id="${c.id}" style="width:24px;height:24px">×</button></div>
         <div class="small mt-s wrapline">${esc(c.summary)}</div>
@@ -2752,7 +2904,7 @@ function panelReport(s){
       <button class="btn" data-act="print">인쇄 · PDF 저장</button>
       <button class="btn" data-act="mkshare">학부모 열람 링크 만들기</button>
       <span class="tiny muted" style="margin-left:auto">생기부 초안 문안은 리포트에 포함되지 않습니다</span></div>
-    <div class="card mb noprint"><div class="card-b" style="padding:14px">
+    <div class="card mb noprint" data-motion-key="briefs-${b.id||s.id}"><div class="card-b" style="padding:14px">
       <div class="grid g2" style="gap:0 14px">
         <label class="f" style="margin-bottom:8px"><span>담임 코멘트 <em>학교생활을 전하는 핵심 내용입니다</em></span>
           <textarea id="rnote" rows="7" placeholder="학교에서의 학습 태도와 친구 관계, 학교생활을 중심으로 작성합니다.">${esc(note)}</textarea></label>
@@ -3084,7 +3236,7 @@ function studentAdminCard(){
       <div style="overflow-x:auto"><table><thead><tr><th>학번</th><th>이름</th><th>접속코드</th>
         <th style="width:170px">이전 학년도</th><th style="width:150px"></th></tr></thead>
       <tbody>${st.length?st.map(s=>{ const hist=(s.history||[]).slice().sort((a,b)=>b.year-a.year);
-        return `<tr>
+        return `<tr data-motion-key="students-${s.id}">
         <td class="mono muted">${scode(s)}</td><td><b>${esc(s.name)}</b></td>
         <td><code style="font-size:14px;letter-spacing:.1em">${s.accessCode||'미발급'}</code></td>
         <td class="tiny muted">${hist.length?hist.map(h=>`${h.year} · ${h.grade}-${h.klass}-${h.number}`).join('<br>'):'<span class="muted">·</span>'}</td>
@@ -3450,7 +3602,7 @@ function studentMine(s){
             불러온 일지 0건 · 버전 ${BUILD}</div>
           <button class="btn sm mt-s" data-act="reload">다시 불러오기</button>
         </div></div>`:''}
-      ${js.length?js.slice(0,20).map(j=>`<div class="jlog">
+      ${js.length?js.slice(0,20).map(j=>`<div class="jlog" data-motion-key="journals-${j.id}">
         <div class="spread"><b class="small">${kdate(j.date)}${j.date===today()?' <span class="tag on">오늘</span>':''}</b>
           <span class="row" style="gap:6px">
           ${j.totalMinutes?`<span class="tag">${hm(j.totalMinutes)}</span>`:''}
@@ -3466,7 +3618,10 @@ function studentMine(s){
 /* ── 학부모 공유 뷰 ── */
 function viewShare(){
   const p=S.share;
-  if(p==='loading') return `<div class="auth"><div class="box"><div class="empty">리포트를 불러오는 중…</div></div></div>`;
+  if(p==='loading') return `<div class="auth"><div class="box"><div class="card" aria-busy="true">
+    <div class="card-b"><div class="jp-skeleton" style="height:28px;width:58%;margin-bottom:18px"></div>
+    <div class="jp-skeleton" style="height:14px;margin-bottom:10px"></div><div class="jp-skeleton" style="height:14px;width:86%;margin-bottom:10px"></div>
+    <div class="jp-skeleton" style="height:120px;margin-top:22px"></div><div class="tiny muted mt">리포트를 불러오는 중…</div></div></div></div></div>`;
   if(p==='error') return `<div class="auth"><div class="box"><div class="card"><div class="card-b">
     <div class="empty"><b>링크를 열 수 없습니다</b>만료되었거나 잘못된 주소입니다. 담임 선생님께 문의해주세요.</div></div></div></div></div>`;
   return `<div class="wrap" style="max-width:860px;margin:0 auto;padding-top:26px">
@@ -3480,13 +3635,16 @@ function viewShare(){
 function topbar(title,sub,extra=''){
   return `<div class="topbar noprint"><div class="grow"><h1>${title}</h1>${sub?`<div class="sub">${sub}</div>`:''}</div>${extra}</div>`;
 }
-function stat(n,l,d=''){ return `<div class="card stat"><div class="n mono">${n}</div><div class="l">${l}</div>${d?`<div class="d">${d}</div>`:''}</div>`; }
+function stat(n,l,d=''){
+  const plain=String(n).replace(/<[^>]*>/g,'').replace(/,/g,'').trim(), m=plain.match(/^-?\d+(?:\.\d+)?/);
+  return `<div class="card stat${plain.length>=6?' compact':''}"${m?` data-count="${m[0]}"`:''}><div class="n mono">${n}</div><div class="l">${l}</div>${d?`<div class="d">${d}</div>`:''}</div>`;
+}
 function barChart(data){
   const max=Math.max(...data.map(d=>d.value),60), W=Math.max(280,data.length*24), H=104, bw=W/data.length;
   return `<svg viewBox="0 0 ${W} ${H+20}" style="width:100%;height:126px;overflow:visible">
     <line x1="0" y1="${H}" x2="${W}" y2="${H}" stroke="var(--line)"/>
     ${data.map((d,i)=>{const h=d.value/max*(H-8);
-      return `<g><rect x="${i*bw+bw*0.18}" y="${H-h}" width="${bw*0.64}" height="${Math.max(h,d.value?2:0)}" rx="2.5"
+      return `<g><rect class="jp-chart-bar" x="${i*bw+bw*0.18}" y="${H-h}" width="${bw*0.64}" height="${Math.max(h,d.value?2:0)}" rx="2.5"
         fill="${d.value?'var(--accent)':'var(--line-2)'}" opacity="${d.value?.88:1}"><title>${d.label}: ${d.value?hm(d.value):'기록 없음'}</title></rect>
       ${data.length<=32?`<text x="${i*bw+bw/2}" y="${H+13}" text-anchor="middle" font-size="9" fill="var(--muted)">${d.label}</text>`:''}</g>`;}).join('')}
     <text x="0" y="9" font-size="9" fill="var(--muted)">${hm(max)}</text></svg>`;
@@ -3498,8 +3656,8 @@ function lineChart(data){
   return `<svg viewBox="0 0 ${W} ${H+18}" style="width:100%;height:124px;overflow:visible">
     <line x1="0" y1="${H}" x2="${W}" y2="${H}" stroke="var(--line)"/>
     <path d="${path} L${W},${H} L0,${H} Z" fill="var(--accent)" opacity=".08"/>
-    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="#fff" stroke="var(--accent)" stroke-width="1.8">
+    <path class="jp-chart-line" pathLength="1" d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p,i)=>`<circle class="jp-chart-dot" cx="${p[0]}" cy="${p[1]}" r="3" fill="#fff" stroke="var(--accent)" stroke-width="1.8">
       <title>${data[i].label}: ${hm(data[i].value)}${data[i].n!=null?` (${data[i].n}명)`:''}</title></circle>`).join('')}
     ${data.map((d,i)=>`<text x="${i/(data.length-1)*W}" y="${H+13}" text-anchor="middle" font-size="9" fill="var(--muted)">${d.label}</text>`).join('')}
     <text x="0" y="9" font-size="9" fill="var(--muted)">${hm(max)}</text></svg>`;
@@ -3511,7 +3669,7 @@ function moodStrip(js){
     const j=js.find(x=>x.date===d); out.push({d,m:Number(j?.mood)||0}); }
   const col=m=>m>=4?'var(--accent)':m===3?'#8aa79c':m===2?'#d8a05f':m===1?'var(--warn)':'var(--line-2)';
   return `<div style="display:grid;grid-template-columns:repeat(${days},1fr);gap:3px;align-items:end;height:76px">
-    ${out.map(x=>`<div title="${kdate(x.d)} ${x.m?moodLabel(x.m):'기록 없음'}"
+    ${out.map(x=>`<div class="jp-chart-bar" title="${kdate(x.d)} ${x.m?moodLabel(x.m):'기록 없음'}"
       style="height:${x.m?18+x.m*11:6}px;border-radius:3px;background:${col(x.m)}"></div>`).join('')}</div>
     <div class="row tiny muted mt-s" style="justify-content:space-between">
       <span>${kdate(out[0].d)}</span><span>${kdate(out[out.length-1].d)}</span></div>
@@ -3526,12 +3684,15 @@ function barList(pairs,fmt){
     <div class="meter"><i style="width:${v/max*100}%"></i></div></div>`).join('');
 }
 function modal(title,body,foot){
-  $('#modalroot').innerHTML=`<div class="mask" data-act="closemodal"><div class="modal" onclick="event.stopPropagation()">
+  $('#modalroot').innerHTML=`<div class="mask" data-act="closemodal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}" onclick="event.stopPropagation()">
     <div class="card-h"><h3>${title}</h3><button class="btn ghost sm" data-act="closemodal" style="margin-left:auto">닫기</button></div>
     <div class="card-b">${body}</div>${foot?`<div class="card-b" style="border-top:1px solid var(--line-2)">${foot}</div>`:''}</div></div>`;
   bind();
+  requestAnimationFrame(()=>{ const root=$('#modalroot .modal');
+    (root?.querySelector('input:not([readonly]),textarea,select')||root?.querySelector('button'))?.focus({preventScroll:true}); });
 }
 const closeModal=()=>$('#modalroot').innerHTML='';
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#modalroot .mask')) closeModal(); });
 
 /* ═════════════ 이벤트 ═════════════ */
 function bind(){
@@ -3544,10 +3705,12 @@ function bind(){
 async function busy(el,fn){
   if(S.busy) return; S.busy=true;
   const old=el?el.innerHTML:null;
-  if(el){ el.disabled=true; el.innerHTML=`<span class="sp"></span> 작업 중…`; }
+  if(el){ el.disabled=true; el.classList.add('is-busy'); el.setAttribute('aria-busy','true');
+    el.innerHTML=`<span class="sp"></span> 작업 중…`; }
   try{ await fn(); }
-  catch(e){ toast(e.message||String(e), 5000); if(e.nokey){ S.view='settings'; render(); } }
-  finally{ S.busy=false; if(el&&document.body.contains(el)){ el.disabled=false; el.innerHTML=old; } }
+  catch(e){ toast(e.message||String(e),5000,'error'); if(e.nokey){ S.view='settings'; render(); } }
+  finally{ S.busy=false; if(el&&document.body.contains(el)){ el.disabled=false; el.classList.remove('is-busy');
+      el.removeAttribute('aria-busy'); el.innerHTML=old; } }
 }
 
 function handle(act,el){
@@ -3741,9 +3904,9 @@ function handle(act,el){
          `hosts 문서 존재: ${p.docExists}\n학교목록 조회: ${p.listOk}\n${p.raw||''}`); },
 
   /* 학습일지 (학생) */
-  addsub(){ $('#subs').insertAdjacentHTML('beforeend',subRow()); bind(); },
+  addsub(){ $('#subs').insertAdjacentHTML('beforeend',subRow()); bind(); JP_MOTION.added($('#subs .subrow:last-child')); },
   delsub(){ el.closest('.subrow').remove(); },
-  adddiff(){ $('#diffs').insertAdjacentHTML('beforeend',diffRow()); bind(); },
+  adddiff(){ $('#diffs').insertAdjacentHTML('beforeend',diffRow()); bind(); JP_MOTION.added($('#diffs .diffrow:last-child')); },
   deldiff(){ el.closest('.diffrow').remove(); },
   setfocus(){ const v=el.dataset.v;
     $('#focusval').value = $('#focusval').value===v ? '0' : v;
@@ -4128,7 +4291,13 @@ function handle(act,el){
     copy(`[기록실 접속코드] ${S.school?.name||''} ${curYear()}학년도 ${klassLabel(S.filter.klass)}\n공용 주소: ${url}\n\n`+
       st.map(x=>`${scode(x)}\t${x.name}\t${x.accessCode||'미발급'}\t${linkOf(x)}`).join('\n')); },
   pickklass(){ S.filter.klass=el.value; render(); },
-  toolopen(){ S.showTools=!S.showTools; render(); },
+  toolopen(){
+    const panel=$('.jp-expand');
+    if(S.showTools&&panel&&!JP_MOTION.reduced()&&panel.animate){
+      panel.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(-6px)'}],
+        {duration:180,easing:'cubic-bezier(.4,0,.2,1)'}).finished.finally(()=>{ S.showTools=false; render(); });
+    }else{ S.showTools=!S.showTools; render(); requestAnimationFrame(()=>JP_MOTION.added($('.jp-expand'))); }
+  },
   fixdupes(){ busy(el,async()=>{
     const seen=new Map(); const kill=[];
     C.journals.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(j=>{
