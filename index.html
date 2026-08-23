@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#2f5d50">
+<meta name="theme-color" content="#173c36">
 <title>기록실 · 학생 기록과 학습일지 관리</title>
 <!-- 홈 화면에 앱으로 설치되게 하는 부분입니다.
      manifest.webmanifest / sw.js 두 파일이 index.html 과 같은 폴더에 있어야 합니다. -->
@@ -360,6 +360,135 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   .diffrow{grid-template-columns:1fr;gap:5px}
   .report{padding:16px}
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   2026 전시형 인터페이스 리뉴얼
+   기록이 많아져도 장면과 흐름이 먼저 보이도록 카드·여백·내비게이션을 정리합니다.
+   ══════════════════════════════════════════════════════════════════ */
+:root{
+  --paper:#f2f0e9; --surface:#fffefa; --surface-2:#f8f6ef;
+  --ink:#17201e; --ink-2:#3f4a47; --muted:#707975;
+  --line:#dedbd0; --line-2:#ebe8de;
+  --accent:#24675c; --accent-ink:#17483f; --accent-wash:#e5f1ed;
+  --warn:#a95c2d; --warn-wash:#fbefe5;
+  --r-xs:8px; --r-sm:11px; --r:18px; --r-lg:24px;
+  --shadow:0 1px 2px rgba(30,43,39,.04),0 8px 24px rgba(30,43,39,.055);
+  --shadow-md:0 2px 4px rgba(30,43,39,.05),0 16px 38px rgba(30,43,39,.09);
+  --shadow-lg:0 24px 70px rgba(19,39,34,.18);
+}
+body{
+  background:
+    radial-gradient(900px 560px at 92% -8%,rgba(211,229,220,.72),transparent 65%),
+    radial-gradient(760px 520px at 15% 108%,rgba(238,219,193,.42),transparent 62%),
+    var(--paper);
+  background-attachment:fixed;
+}
+.shell{grid-template-columns:274px minmax(0,1fr)}
+.side{
+  background:linear-gradient(165deg,#183f39 0%,#11332e 58%,#0d2a26 100%);
+  border-right:0;padding:24px 16px;color:#fff;box-shadow:10px 0 36px rgba(20,48,43,.11)
+}
+.brand{padding:2px 10px 24px;gap:11px}
+.brand-mark{width:38px;height:38px;border-radius:13px;background:#efb96e;color:#193b35;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 8px 20px rgba(0,0,0,.18);font-size:17px}
+.brand b{font-size:19px;color:#fff}.brand small{color:rgba(255,255,255,.62);margin-top:1px}
+.navgroup{margin-bottom:19px}.navgroup>span{color:rgba(255,255,255,.5);font-size:11.5px;
+  letter-spacing:.1em;text-transform:uppercase;padding:0 11px 7px}
+.side select{background-color:rgba(255,255,255,.09);border-color:rgba(255,255,255,.13);color:#fff;
+  background-image:none}.side select option{color:var(--ink);background:#fff}
+.nav{color:rgba(255,255,255,.72);padding:11px 12px;border-radius:12px;font-size:15px}
+.nav>span:first-child{width:20px;text-align:center;opacity:.8}
+.nav.on{color:#fff;background:rgba(255,255,255,.13);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.nav.on::before{left:-16px;width:4px;height:24px;background:#efb96e;border-radius:0 5px 5px 0}
+.nav .cnt{background:rgba(255,255,255,.12);color:rgba(255,255,255,.72)}
+.side .tiny,.side .muted{color:rgba(255,255,255,.58)}
+.side .tag{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.76)}
+.side .btn.ghost{color:rgba(255,255,255,.75)}
+.side-foot{border-top-color:rgba(255,255,255,.11);padding:17px 9px 0}
+@media (hover:hover) and (pointer:fine){
+  .side .nav:hover{background:rgba(255,255,255,.08);color:#fff}
+  .side .btn.ghost:hover{background:rgba(255,255,255,.1);color:#fff}
+}
+.main{position:relative}
+.topbar{min-height:86px;padding:19px 34px;background:rgba(242,240,233,.82);backdrop-filter:blur(18px) saturate(1.2);
+  box-shadow:0 1px 0 rgba(85,94,89,.13)}
+.topbar h1{font-size:28px;font-weight:720;letter-spacing:-.035em}.topbar .sub{font-size:14px;margin-top:2px}
+.wrap{padding:32px 34px 96px;max-width:1360px;margin:0 auto}
+.card{border-color:rgba(121,128,121,.19);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.card-h{padding:19px 22px;border-bottom-color:rgba(121,128,121,.13);
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(248,246,239,.42))}
+.card-h h3{font-size:17.5px;font-weight:680;letter-spacing:-.02em}.card-h .sub{font-size:13.5px}
+.card-b{padding:22px}.card-h + .card-b{padding-top:21px}
+.grid{gap:18px}.mt{margin-top:18px}.mb{margin-bottom:18px}.mt-s{margin-top:10px}.mb-s{margin-bottom:10px}
+.stat{position:relative;min-height:128px;padding:22px 22px 19px;background:
+  linear-gradient(145deg,rgba(255,255,255,.94),rgba(248,247,240,.88));isolation:isolate}
+.stat::after{content:"";position:absolute;right:-25px;bottom:-31px;width:96px;height:96px;border-radius:50%;
+  background:var(--accent-wash);opacity:.72;z-index:-1}
+.stat .n{font-size:38px;font-weight:760;color:var(--ink)}.stat .l{font-size:13.5px;margin-top:7px}.stat .d{margin-top:auto;padding-top:9px}
+.btn{padding:10px 16px;border-radius:12px;border-color:#d7d5cb;background:#fffefa;font-weight:590;
+  box-shadow:0 1px 1px rgba(30,43,39,.025)}
+.btn.pri{background:linear-gradient(145deg,#2c7468,#205d53);border-color:#205d53;
+  box-shadow:0 8px 18px rgba(36,103,92,.2),inset 0 1px 0 rgba(255,255,255,.18)}
+.btn.ai{background:linear-gradient(145deg,#202b28,#101815);border-color:#101815;
+  box-shadow:0 8px 18px rgba(20,31,28,.17)}
+.btn.sm{border-radius:10px}.btn.wide{padding:13px 18px}
+@media (hover:hover) and (pointer:fine){
+  .btn:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(30,43,39,.08);background:#fff}
+  .btn.pri:hover{background:#174e45;border-color:#174e45}.btn.ai:hover{background:#050807;border-color:#050807}
+}
+input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],select,textarea{
+  border-color:#d9d6ca;border-radius:12px;background:#fffefb;padding:11px 13px}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(36,103,92,.12)}
+textarea{line-height:1.75}.tag{padding:5px 11px;border-color:#dedbd1;background:#faf8f1}
+.tag.on{background:#e3f1ec;border-color:#bfd9d1}.tag.warn{background:#fbefe5;border-color:#ecd3c1}
+.tabs{gap:5px;padding:6px;border:1px solid rgba(121,128,121,.17);border-radius:15px;background:rgba(235,232,222,.68);margin:0 18px;
+  box-shadow:inset 0 1px 2px rgba(30,43,39,.035)}
+.tab{padding:10px 14px;border:0;border-radius:10px;font-size:14.5px}
+.tab.on{background:#fffefa;color:var(--accent-ink);box-shadow:0 2px 8px rgba(30,43,39,.08);border:0}
+.tabsep{margin:6px 3px;background:rgba(121,128,121,.2)}
+table{border-collapse:separate;border-spacing:0}th{background:#f8f6ef;padding:13px 14px;border-bottom-color:#dedbd0}
+td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
+.meter{height:8px;background:#e8e5da}.meter i{background:linear-gradient(90deg,#2b7568,#68a092)}
+.jlog{position:relative;margin-left:12px;border:0;border-left:2px solid #c6dcd5;border-radius:0 var(--r) var(--r) 0;
+  padding:18px 19px;background:#fffefa;box-shadow:var(--shadow)}
+.jlog::before{content:"";position:absolute;left:-7px;top:22px;width:12px;height:12px;border-radius:50%;
+  background:#efb96e;border:3px solid var(--paper);box-shadow:0 0 0 1px #d5ae78}
+.life-groups{display:grid;gap:11px}.life-group{padding:13px 14px;border:1px solid var(--line-2);border-radius:14px;background:#faf8f2}
+.life-group-title{font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.035em;margin-bottom:8px}
+.tagpick{gap:7px}.tagbtn{padding:9px 13px;background:#fffefa;border-color:#d9d6ca;box-shadow:0 1px 1px rgba(30,43,39,.03)}
+.tagbtn.on{background:#24675c;border-color:#24675c;box-shadow:0 5px 12px rgba(36,103,92,.17)}
+.life-none{padding-left:2px}.life-none .tagbtn{background:transparent;box-shadow:none}
+.life-exhibit{border-color:#cbdcd6;background:linear-gradient(135deg,#fffefa 0%,#eef5f1 100%)}
+.exhibit-kicker{font-size:10.5px!important;letter-spacing:.16em;font-weight:760;color:var(--accent)!important;margin-bottom:2px}
+.moment-list{display:grid;gap:8px}.moment{display:grid;grid-template-columns:80px minmax(0,1fr) auto;gap:12px;align-items:start;
+  width:100%;padding:11px 12px;border:0;border-bottom:1px solid rgba(121,128,121,.14);background:transparent;text-align:left;
+  cursor:pointer;color:var(--ink-2);font-size:14px;line-height:1.55;border-radius:10px}
+.moment:last-child{border-bottom:0}.moment-who{font-weight:700;color:var(--accent-ink)}.moment time{font-size:12px;color:var(--muted);white-space:nowrap}
+@media (hover:hover) and (pointer:fine){.moment:hover{background:rgba(255,255,255,.7)}}
+.moodbtn{border-radius:11px;background:#fffefa}.moodbtn.on{background:#24675c;border-color:#24675c}
+.cellbox{height:36px;border-radius:9px;background:#faf8f1}.empty{padding:48px 20px}.empty b{font-size:16px}
+.auth{background:
+  radial-gradient(880px 540px at 16% -8%,rgba(208,229,220,.92),transparent 62%),
+  radial-gradient(720px 520px at 104% 105%,rgba(239,199,143,.34),transparent 58%),#f2f0e9}
+.auth .box{max-width:460px}.auth .box>.card,.gatecard{box-shadow:var(--shadow-md)}
+.gatecard{border-radius:20px;padding:24px 22px;min-height:190px}.gatecard .gi{width:52px;height:52px;border-radius:16px}
+.rolebtn{border-radius:15px;padding:16px}.modal{border:1px solid rgba(255,255,255,.55);border-radius:24px}
+.report{border-radius:22px;border-color:rgba(121,128,121,.2);box-shadow:var(--shadow);margin:0 auto}
+.report section>h4{border-left:0;padding-left:0;color:var(--accent-ink);font-size:16px}
+.report section>h4::after{content:"";display:block;width:28px;height:2px;background:#efb96e;margin-top:6px;border-radius:2px}
+
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}.topbar{min-height:auto;padding:16px 17px}.topbar h1{font-size:23px}
+  .wrap{padding:20px 15px 112px}.card{border-radius:16px}.card-h{padding:16px 17px}.card-b{padding:17px}
+  .tabs{margin:0 10px}.stat{min-height:116px;padding:18px}.stat .n{font-size:31px}
+  .mob{left:10px;right:10px;bottom:10px;border:1px solid rgba(121,128,121,.22);border-radius:18px;
+    background:rgba(255,254,250,.94);box-shadow:0 14px 38px rgba(30,43,39,.16);backdrop-filter:blur(16px);
+    padding:6px 5px calc(6px + env(safe-area-inset-bottom))}
+  .mob button.on{border-radius:12px}.moment{grid-template-columns:64px minmax(0,1fr)}.moment time{display:none}
+}
+@media print{
+  body{background:#fff}.card,.report{box-shadow:none}.report{border-radius:0}.report section>h4::after{display:none}
+}
 </style>
 </head>
 <body>
@@ -373,7 +502,7 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.21.4"></script>
+<script src="skills.js?v=2026.08.23.1"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -426,7 +555,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.21.4';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.23.1';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -513,13 +642,15 @@ const AREAS = {
     desc:'담임 관점 · 인성·태도·관계 중심 (2026학년도 900byte)',
     meta:[],
     fields:[
-      {k:'repeat',label:'반복행동',ph:'꾸준히 반복해서 보이는 행동 (근거 있을 때만)'},
-      {k:'situation',label:'경험 상황',ph:'인상적이었던 장면·상황'},
       {k:'inter',label:'상호작용',ph:'의견 조율, 피드백 반영 등 구체적으로'},
       {k:'role',label:'책임 · 역할',ph:'맡은 역할과 그 안에서 수행한 기능'},
+      {k:'relation',label:'친구 관계 · 배려',ph:'친구를 돕거나 의견을 들어준 장면, 갈등을 조정한 모습'},
+      {k:'school',label:'학급생활 · 공동체',ph:'당번, 청소, 규칙, 행사 준비 등 학급에서 함께한 모습'},
+      {k:'situation',label:'경험 상황',ph:'인상적이었던 장면·상황'},
+      {k:'repeat',label:'반복행동',ph:'꾸준히 반복해서 보이는 행동 (근거 있을 때만)'},
       {k:'overcome',label:'어려움 극복',ph:'문제 인식 → 수정 → 재시도의 과정'},
       {k:'change',label:'변화',ph:'학년 초 대비 달라진 점'},
-      {k:'note',label:'교사 관찰 메모',ph:'동료평가 등 다른 관찰자 기록도 함께'}]},
+      {k:'note',label:'추가 관찰 메모',ph:'담임 메모, 동료평가 등 다른 관찰자 기록도 함께'}]},
 };
 const AREA_KEYS = Object.keys(AREAS);
 
@@ -940,16 +1071,28 @@ function dupCount(sid){
    리포트에서도 행특에서도 무슨 맥락인지 알 수 없게 됩니다.
    질문은 고정하고, 고를 것을 여럿 두어 지루하지 않게 하는 쪽을 택했습니다. */
 const LIFE_TAGS = [
-  {k:'help',    label:'친구를 도왔다',        axis:'inter'},
-  {k:'helped',  label:'도움을 받았다',        axis:'inter'},
-  {k:'ask',     label:'먼저 물어봤다',        axis:'inter'},
-  {k:'speak',   label:'내 의견을 냈다',       axis:'inter'},
-  {k:'present', label:'발표했다',             axis:'role'},
-  {k:'role',    label:'역할을 맡았다',        axis:'role'},
-  {k:'lead',    label:'먼저 나서서 정리했다', axis:'role'},
-  {k:'finish',  label:'미루던 걸 끝냈다',     axis:'overcome'},
-  {k:'retry',   label:'틀린 걸 다시 했다',    axis:'overcome'},
-  {k:'none',    label:'오늘은 별일 없었다',   axis:''},
+  {k:'help',       label:'친구를 도왔다',          axis:'inter',    group:'together'},
+  {k:'helped',     label:'도움을 받았다',          axis:'inter',    group:'together'},
+  {k:'listen',     label:'친구 의견을 들어줬다',   axis:'inter',    group:'together'},
+  {k:'care',       label:'친구를 배려했다',        axis:'inter',    group:'together'},
+  {k:'ask',        label:'먼저 물어봤다',          axis:'inter',    group:'together'},
+  {k:'speak',      label:'내 의견을 냈다',         axis:'inter',    group:'together'},
+  {k:'adjust',     label:'의견 차이를 조율했다',   axis:'inter',    group:'together'},
+  {k:'present',    label:'발표했다',               axis:'role',     group:'part'},
+  {k:'role',       label:'역할을 맡았다',          axis:'role',     group:'part'},
+  {k:'lead',       label:'먼저 나서서 정리했다',   axis:'role',     group:'part'},
+  {k:'participate',label:'학급 활동에 참여했다',   axis:'role',     group:'part'},
+  {k:'prepare',    label:'맡은 준비를 챙겼다',     axis:'role',     group:'part'},
+  {k:'rule',       label:'약속과 규칙을 지켰다',   axis:'repeat',   group:'growth'},
+  {k:'finish',     label:'미루던 일을 끝냈다',     axis:'overcome', group:'growth'},
+  {k:'retry',      label:'잘 안 된 일을 다시 했다',axis:'overcome', group:'growth'},
+  {k:'admit',      label:'잘못을 인정하고 고쳤다', axis:'overcome', group:'growth'},
+  {k:'none',       label:'오늘은 별일 없었다',     axis:'',         group:'none'},
+];
+const LIFE_GROUPS = [
+  {k:'together',label:'친구와 함께'},
+  {k:'part',label:'학급에서 맡은 일'},
+  {k:'growth',label:'태도와 변화'},
 ];
 const TAG_LABEL = Object.fromEntries(LIFE_TAGS.map(t=>[t.k,t.label]));
 // 고른 태그를 세어 봅니다 (별일 없었다는 세지 않습니다)
@@ -1059,9 +1202,9 @@ const HT_AXES = [
 ];
 // 학생이 쓴 문장에서 축을 알아보는 표현들
 const HT_WORDS = {
-  inter:/친구|짝(이|을|에게|과|한테)?|모둠|조원|조별|팀원|팀|같이|함께|도와|도움|설명해|가르쳐|알려\s*줬|알려\s*주|의견|토론|발표|물어봐|질문했|얘기했|이야기했/,
-  role:/역할|맡(아|았|은|게)|반장|부반장|조장|팀장|부장|서기|도우미|담당|주도|이끌|정리했|챙겼/,
-  overcome:/다시|또\s*풀|고쳐|보완|극복|틀린|오답|복습|안\s*(되|돼)(서|길래|더니)|어려웠지만|포기(하지|안)|끝까지|버텼|해냈|결국/,
+  inter:/친구|짝(이|을|에게|과|한테)?|모둠|조원|조별|팀원|팀|같이|함께|도와|도움|배려|양보|경청|들어\s*줬|설명해|가르쳐|알려\s*줬|알려\s*주|의견|조율|중재|갈등|토론|발표|물어봐|질문했|사과|얘기했|이야기했/,
+  role:/역할|맡(아|았|은|게)|반장|부반장|조장|팀장|부장|서기|도우미|담당|주도|이끌|정리했|챙겼|준비|청소|당번|봉사|학급\s*활동|규칙|시간\s*약속/,
+  overcome:/다시|또\s*풀|고쳐|보완|극복|틀린|오답|복습|안\s*(되|돼)(서|길래|더니)|어려웠지만|포기(하지|안)|끝까지|버텼|해냈|결국|인정하고|사과하고/,
 };
 /* 한글 받침에 맞춰 조사를 고릅니다. "3시간 10분로"처럼 어색해지지 않도록. */
 function jong(t){
@@ -2064,6 +2207,9 @@ function viewDash(){
   const scoped=new Set(st.map(x=>x.id));
   const recent=C.journals.filter(j=>j.date>=addDays(today(),-6)&&inYear(j.date)&&scoped.has(j.studentId));
   const avg=recent.length?Math.round(recent.reduce((a,b)=>a+b.totalMinutes,0)/recent.length):0;
+  const lifeCount=recent.reduce((n,j)=>n+(j.tags||[]).filter(k=>k!=='none').length,0);
+  const lifeTop=Object.entries(tagCount(recent)).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const lifeMoments=recent.filter(j=>String(j.good||'').trim()).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
   // 주간 모드 학생은 "이번 주에 썼는가"로 봅니다
   const thisWeek=wk(today());
   const wroteD=new Set(C.journals.filter(j=>j.date===today()&&j.type!=='weekly').map(j=>j.studentId));
@@ -2097,7 +2243,7 @@ function viewDash(){
       ${stat(`${doneCells}<span style="font-size:15px;color:var(--muted)">/${totalCells}</span>`,
         areaKeys().length===1?`${AREAS[areaKeys()[0]].name} 완료`:'생기부 기록 완료',
         `<span class="muted tiny">${Math.round(doneCells/totalCells*100)}% 진행</span>`)}
-      ${stat(recent.filter(j=>j.seed).length,'학생이 남긴 궁금증','<span class="muted tiny">최근 7일 · 기록 소재가 됩니다</span>')}
+      ${stat(lifeCount,'학교생활 장면','<span class="muted tiny">최근 7일 · 관계와 역할 기록</span>')}
     </div>
     ${praise.length?`<div class="card mb" style="border-color:#c8ddd5;background:var(--accent-wash)">
       <div class="card-b"><b class="small" style="color:var(--accent-ink)">✦ 오늘 한마디 해주면 좋을 학생</b>
@@ -2114,6 +2260,19 @@ function viewDash(){
         return `<div class="row mt-s" style="gap:6px;flex-wrap:wrap">
           <button class="btn sm" data-act="copynag" data-t="${esc(msg)}">명단·이유 복사</button>
           <span class="tiny muted">종례 때 부르거나 개별 메시지 보낼 때 쓰세요</span></div>`; })()}
+      </div></div>`:''}
+
+    ${lifeTop.length||lifeMoments.length?`<div class="card mb life-exhibit">
+      <div class="card-h"><div><div class="tiny muted exhibit-kicker">SCHOOL LIFE ARCHIVE</div>
+        <h3>이번 주 학교생활 장면</h3></div><span class="sub" style="margin-left:auto">학생이 직접 남긴 관계·역할 기록</span></div>
+      <div class="card-b">
+        ${lifeTop.length?`<div class="row mb" style="gap:7px;flex-wrap:wrap">${lifeTop.map(([k,n])=>
+          `<span class="tag on">${esc(TAG_LABEL[k]||k)} <b>${n}</b></span>`).join('')}</div>`:''}
+        ${lifeMoments.length?`<div class="moment-list">${lifeMoments.map(j=>{const s=student(j.studentId);return s?`
+          <button class="moment" data-act="open" data-id="${s.id}" data-tab="journal">
+            <span class="moment-who">${esc(s.name)}</span><span>${esc(cut(j.good,86))}</span><time>${kdate(j.date)}</time>
+          </button>`:'';}).join('')}</div>`
+        :'<div class="tiny muted">아직 한 줄 기록은 없지만, 위 선택 기록부터 차곡차곡 모이고 있습니다.</div>'}
       </div></div>`:''}
 
     ${(()=>{ const week=addDays(today(),-6);
@@ -3114,8 +3273,8 @@ function studentWeek(s){
           ${MOODS.map(([v,l])=>`<button type="button" class="moodbtn ${Number(j.mood)===v?'on':''}"
             data-act="setmood" data-v="${v}">${l}</button>`).join('')}</div>
         <input type="hidden" name="mood" id="moodval" value="${Number(j.mood)||0}"></label>
-      <label class="f"><span>위에 고른 일, 어떤 일이었나요 <em>한 줄이면 충분합니다 · 선택</em></span>
-        <textarea name="good" rows="2" placeholder="없으면 비워두어도 됩니다.">${esc(j.good||'')}</textarea></label>
+      <label class="f"><span>이번 주 학교에서 기억에 남은 장면 <em>한 줄이면 충분합니다 · 선택</em></span>
+        <textarea name="good" rows="2" placeholder="예) 모둠 의견이 갈렸을 때 친구들 이야기를 듣고 발표 순서를 함께 정했다.">${esc(j.good||'')}</textarea></label>
       <label class="f"><span>힘들었던 일 <em>선생님만 봅니다</em></span>
         <textarea name="hard" rows="2" placeholder="공부, 친구 관계, 몸 상태, 무엇이든 괜찮습니다.">${esc(j.hard||'')}</textarea></label>
       <label class="f" style="margin-bottom:8px"><span>이번 주 한 줄 <em>선택</em></span>
@@ -3186,7 +3345,7 @@ function studentWrite(s){
         </div>
         <input type="hidden" name="mood" id="moodval" value="${Number(j.mood)||0}"></label>
 
-      <label class="f"><span>위에 고른 일, 어떤 일이었나요 <em>한 줄이면 충분합니다 · 선택</em></span>
+      <label class="f"><span>오늘 학교에서 기억에 남은 장면 <em>한 줄이면 충분합니다 · 선택</em></span>
         <textarea name="good" rows="2" placeholder="${(j.tags||[]).length&&!(j.tags||[]).includes('none')
           ? esc('예) '+TAG_LABEL[(j.tags||[]).filter(k=>k!=='none')[0]]+' — 누구와, 무슨 일로')
           : '없으면 비워두어도 됩니다.'}">${esc(j.good||'')}</textarea></label>
@@ -3205,16 +3364,21 @@ function studentWrite(s){
       <button type="button" class="btn pri wide mt" data-act="savejournal">${j.id?'수정 저장':'학습일지 저장'}</button>
     </div></div></form></div>`;
 }
-const tagPick = (sel,weekly)=>`
-  <div class="spread mb-s"><h3 style="font-size:15px">${weekly?'이번 주':'오늘'} 학교에서 이런 일 있었나요?</h3>
+const tagPick = (sel,weekly)=>{
+  const picked=sel||[];
+  const button=t=>`<button type="button" class="tagbtn ${t.k==='none'?'none':''} ${picked.includes(t.k)?'on':''}"
+    data-act="ttag" data-k="${t.k}">${t.label}</button>`;
+  return `<div class="spread mb-s"><h3 style="font-size:15px">${weekly?'이번 주':'오늘'} 학교에서 이런 일 있었나요?</h3>
     <span class="tiny muted">해당되는 것을 다 눌러주세요</span></div>
-  <div class="tagpick" id="tagrow">
-    ${LIFE_TAGS.map(t=>`<button type="button" class="tagbtn ${t.k==='none'?'none':''} ${(sel||[]).includes(t.k)?'on':''}"
-      data-act="ttag" data-k="${t.k}">${t.label}</button>`).join('')}
+  <div class="life-groups" id="tagrow">
+    ${LIFE_GROUPS.map(g=>`<div class="life-group"><div class="life-group-title">${g.label}</div>
+      <div class="tagpick">${LIFE_TAGS.filter(t=>t.group===g.k).map(button).join('')}</div></div>`).join('')}
+    <div class="tagpick life-none">${LIFE_TAGS.filter(t=>t.group==='none').map(button).join('')}</div>
   </div>
-  <input type="hidden" name="tags" id="tagval" value="${esc((sel||[]).join(','))}">
+  <input type="hidden" name="tags" id="tagval" value="${esc(picked.join(','))}">
   <div class="tiny muted mt-s" style="line-height:1.8">
-    누르기만 해도 기록이 됩니다. 아래 한 줄은 안 써도 괜찮습니다.</div>`;
+    누르기만 해도 기록이 됩니다. 장면을 한 줄 더 적으면 담임 선생님이 학교생활을 훨씬 구체적으로 볼 수 있습니다.</div>`;
+};
 
 const subRow=(x={})=>{ const m=Number(x.minutes)||0;
   return `<div class="subrow">
