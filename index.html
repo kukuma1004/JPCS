@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#17172f">
+<meta name="theme-color" content="#202226">
 <title>기록실 · 학생 기록과 학습일지 관리</title>
 <!-- 홈 화면에 앱으로 설치되게 하는 부분입니다.
      manifest.webmanifest / sw.js 두 파일이 index.html 과 같은 폴더에 있어야 합니다. -->
@@ -126,7 +126,7 @@ textarea{resize:vertical;min-height:82px;line-height:1.7}
 select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236f6d66' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 
 .tag{display:inline-flex;align-items:center;gap:5px;font-size:13.5px;padding:3px 10px;border-radius:var(--r-full);background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
-.tag.on{background:var(--accent-wash);border-color:#d7d4f6;color:var(--accent-ink);font-weight:600}
+.tag.on{background:var(--accent-wash);border-color:var(--accent-line);color:var(--accent-ink);font-weight:600}
 .tag.warn{background:var(--warn-wash);border-color:#eddac9;color:var(--warn)}
 .pill{display:inline-block;width:8px;height:8px;border-radius:3px}
 
@@ -245,7 +245,7 @@ tbody tr:last-child td{border-bottom:0}
   background:var(--surface-2);color:var(--muted);opacity:.55;
   transition:opacity var(--dur-ui) var(--ease),background var(--dur-ui) var(--ease)}
 .badge i{font-style:normal;font-size:13px;filter:grayscale(1)}
-.badge.on{opacity:1;background:var(--accent-wash);border-color:#d7d4f6;color:var(--accent-ink)}
+.badge.on{opacity:1;background:var(--accent-wash);border-color:var(--accent-line);color:var(--accent-ink)}
 .badge.on i{filter:none}
 .mask{position:fixed;inset:0;background:rgba(27,27,25,.32);z-index:100;display:grid;place-items:center;
   padding:20px;backdrop-filter:blur(3px);animation:maskIn 160ms var(--ease-out)}
@@ -366,30 +366,30 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
    기록이 많아져도 장면과 흐름이 먼저 보이도록 카드·여백·내비게이션을 정리합니다.
    ══════════════════════════════════════════════════════════════════ */
 :root{
-  --paper:#f4f3f8; --surface:#fff; --surface-2:#f8f7fc;
-  --ink:#191922; --ink-2:#484858; --muted:#767583;
-  --line:#dedde8; --line-2:#ecebf2;
-  --accent:#5b5bd6; --accent-ink:#3f3c96; --accent-wash:#eeedff;
+  --paper:#f4f4f2; --surface:#fff; --surface-2:#f7f7f5;
+  --ink:#1e2024; --ink-2:#4b4e55; --muted:#74777d;
+  --line:#dedfdf; --line-2:#ececea;
+  --accent:#5a5f9e; --accent-ink:#42466f; --accent-wash:#f0f0f7; --accent-line:#d7d8e8;
   --warn:#a95c2d; --warn-wash:#fbefe5;
   --r-xs:8px; --r-sm:11px; --r:18px; --r-lg:24px;
-  --shadow:0 1px 2px rgba(35,33,59,.035),0 8px 24px rgba(35,33,59,.06);
-  --shadow-md:0 2px 4px rgba(35,33,59,.045),0 16px 38px rgba(35,33,59,.1);
-  --shadow-lg:0 24px 70px rgba(24,22,54,.2);
+  --shadow:0 1px 2px rgba(29,31,35,.035),0 8px 24px rgba(29,31,35,.055);
+  --shadow-md:0 2px 4px rgba(29,31,35,.045),0 16px 38px rgba(29,31,35,.09);
+  --shadow-lg:0 24px 70px rgba(20,21,24,.18);
 }
 body{
   background:
-    radial-gradient(900px 560px at 92% -8%,rgba(211,207,255,.55),transparent 65%),
-    radial-gradient(760px 520px at 15% 108%,rgba(242,222,196,.36),transparent 62%),
+    radial-gradient(920px 560px at 92% -8%,rgba(255,255,255,.88),transparent 66%),
+    radial-gradient(760px 520px at 12% 108%,rgba(226,227,230,.42),transparent 64%),
     var(--paper);
   background-attachment:fixed;
 }
 .shell{grid-template-columns:274px minmax(0,1fr)}
 .side{
-  background:linear-gradient(165deg,#20203d 0%,#17172f 58%,#101022 100%);
-  border-right:0;padding:24px 16px;color:#fff;box-shadow:10px 0 36px rgba(24,22,54,.14)
+  background:linear-gradient(165deg,#292b30 0%,#202226 58%,#191b1f 100%);
+  border-right:0;padding:24px 16px;color:#fff;box-shadow:10px 0 36px rgba(20,21,24,.12)
 }
 .brand{padding:2px 10px 24px;gap:11px}
-.brand-mark{width:38px;height:38px;border-radius:13px;background:#efb96e;color:#24203f;
+.brand-mark{width:38px;height:38px;border-radius:13px;background:#d5b06b;color:#29251e;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 8px 20px rgba(0,0,0,.18);font-size:17px}
 .brand b{font-size:19px;color:#fff}.brand small{color:rgba(255,255,255,.62);margin-top:1px}
 .navgroup{margin-bottom:19px}.navgroup>span{color:rgba(255,255,255,.5);font-size:11.5px;
@@ -399,7 +399,7 @@ body{
 .nav{color:rgba(255,255,255,.72);padding:11px 12px;border-radius:12px;font-size:15px}
 .nav>span:first-child{width:20px;text-align:center;opacity:.8}
 .nav.on{color:#fff;background:rgba(255,255,255,.13);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-.nav.on::before{left:-16px;width:4px;height:24px;background:#efb96e;border-radius:0 5px 5px 0}
+.nav.on::before{left:-16px;width:4px;height:24px;background:#8f93c6;border-radius:0 5px 5px 0}
 .nav .cnt{background:rgba(255,255,255,.12);color:rgba(255,255,255,.72)}
 .side .tiny,.side .muted{color:rgba(255,255,255,.58)}
 .side .tag{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.76)}
@@ -410,61 +410,61 @@ body{
   .side .btn.ghost:hover{background:rgba(255,255,255,.1);color:#fff}
 }
 .main{position:relative}
-.topbar{min-height:86px;padding:19px 34px;background:rgba(244,243,248,.86);backdrop-filter:blur(18px) saturate(1.2);
-  box-shadow:0 1px 0 rgba(85,94,89,.13)}
+.topbar{min-height:86px;padding:19px 34px;background:rgba(244,244,242,.9);backdrop-filter:blur(18px) saturate(1.08);
+  box-shadow:0 1px 0 rgba(45,47,52,.1)}
 .topbar h1{font-size:28px;font-weight:720;letter-spacing:-.035em}.topbar .sub{font-size:14px;margin-top:2px}
 .wrap{padding:32px 34px 96px;max-width:1360px;margin:0 auto}
-.card{border-color:rgba(121,128,121,.19);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
-.card-h{padding:19px 22px;border-bottom-color:rgba(121,128,121,.13);
-  background:linear-gradient(180deg,rgba(255,255,255,.72),rgba(248,247,252,.58))}
+.card{border-color:rgba(82,85,90,.17);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.card-h{padding:19px 22px;border-bottom-color:rgba(82,85,90,.12);
+  background:linear-gradient(180deg,rgba(255,255,255,.8),rgba(247,247,245,.62))}
 .card-h h3{font-size:17.5px;font-weight:680;letter-spacing:-.02em}.card-h .sub{font-size:13.5px}
 .card-b{padding:22px}.card-h + .card-b{padding-top:21px}
 .grid{gap:18px}.mt{margin-top:18px}.mb{margin-bottom:18px}.mt-s{margin-top:10px}.mb-s{margin-bottom:10px}
 .stat{position:relative;min-height:128px;padding:22px 22px 19px;background:
-  linear-gradient(145deg,rgba(255,255,255,.98),rgba(246,245,252,.92));isolation:isolate}
+  linear-gradient(145deg,rgba(255,255,255,.99),rgba(246,246,244,.94));isolation:isolate}
 .stat::after{content:"";position:absolute;right:-25px;bottom:-31px;width:96px;height:96px;border-radius:50%;
   background:var(--accent-wash);opacity:.72;z-index:-1}
 .stat .n{font-size:38px;font-weight:760;color:var(--ink)}.stat .l{font-size:13.5px;margin-top:7px}.stat .d{margin-top:auto;padding-top:9px}
-.btn{padding:10px 16px;border-radius:12px;border-color:#d9d8e4;background:#fff;font-weight:590;
-  box-shadow:0 1px 1px rgba(35,33,59,.025)}
-.btn.pri{background:linear-gradient(145deg,#7169e8,#554dcc);border-color:#554dcc;
-  box-shadow:0 8px 18px rgba(91,91,214,.22),inset 0 1px 0 rgba(255,255,255,.2)}
-.btn.ai{background:linear-gradient(145deg,#29283b,#151522);border-color:#151522;
-  box-shadow:0 8px 18px rgba(26,24,54,.18)}
+.btn{padding:10px 16px;border-radius:12px;border-color:#d9dadb;background:#fff;font-weight:590;
+  box-shadow:0 1px 1px rgba(29,31,35,.025)}
+.btn.pri{background:linear-gradient(145deg,#686da9,#50558d);border-color:#50558d;
+  box-shadow:0 8px 18px rgba(90,95,158,.19),inset 0 1px 0 rgba(255,255,255,.2)}
+.btn.ai{background:linear-gradient(145deg,#303238,#1f2125);border-color:#1f2125;
+  box-shadow:0 8px 18px rgba(20,21,24,.16)}
 .btn.sm{border-radius:10px}.btn.wide{padding:13px 18px}
 @media (hover:hover) and (pointer:fine){
-  .btn:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(35,33,59,.08);background:#fff}
-  .btn.pri:hover{background:#45409f;border-color:#45409f}.btn.ai:hover{background:#090911;border-color:#090911}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(29,31,35,.08);background:#fff}
+  .btn.pri:hover{background:#444977;border-color:#444977}.btn.ai:hover{background:#111214;border-color:#111214}
 }
 input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],select,textarea{
-  border-color:#d9d6ca;border-radius:12px;background:#fffefb;padding:11px 13px}
-input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(91,91,214,.13)}
-textarea{line-height:1.75}.tag{padding:5px 11px;border-color:#dedbd1;background:#faf8f1}
-.tag.on{background:#eeedff;border-color:#cfccf2}.tag.warn{background:#fbefe5;border-color:#ecd3c1}
-.tabs{gap:5px;padding:6px;border:1px solid rgba(104,102,132,.16);border-radius:15px;background:rgba(235,234,244,.76);margin:0 18px;
-  box-shadow:inset 0 1px 2px rgba(35,33,59,.035)}
+  border-color:#d9dadb;border-radius:12px;background:#fff;padding:11px 13px}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(90,95,158,.12)}
+textarea{line-height:1.75}.tag{padding:5px 11px;border-color:#dedfdf;background:#f8f8f6}
+.tag.on{background:var(--accent-wash);border-color:var(--accent-line)}.tag.warn{background:#fbefe5;border-color:#ecd3c1}
+.tabs{gap:5px;padding:6px;border:1px solid rgba(82,85,90,.14);border-radius:15px;background:rgba(232,233,232,.72);margin:0 18px;
+  box-shadow:inset 0 1px 2px rgba(29,31,35,.035)}
 .tab{padding:10px 14px;border:0;border-radius:10px;font-size:14.5px}
-.tab.on{background:#fff;color:var(--accent-ink);box-shadow:0 2px 8px rgba(35,33,59,.08);border:0}
-.tabsep{margin:6px 3px;background:rgba(121,128,121,.2)}
+.tab.on{background:#fff;color:var(--accent-ink);box-shadow:0 2px 8px rgba(29,31,35,.08);border:0}
+.tabsep{margin:6px 3px;background:rgba(82,85,90,.18)}
 table{border-collapse:separate;border-spacing:0}th{background:var(--surface-2);padding:13px 14px;border-bottom-color:var(--line)}
 td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
-.meter{height:8px;background:#e8e7f0}.meter i{background:linear-gradient(90deg,#5b5bd6,#9188ee)}
-.jlog{position:relative;margin-left:12px;border:0;border-left:2px solid #c6dcd5;border-radius:0 var(--r) var(--r) 0;
+.meter{height:8px;background:#e7e8e8}.meter i{background:linear-gradient(90deg,#5a5f9e,#8589b8)}
+.jlog{position:relative;margin-left:12px;border:0;border-left:2px solid #d4d5d7;border-radius:0 var(--r) var(--r) 0;
   padding:18px 19px;background:#fff;box-shadow:var(--shadow)}
 .jlog::before{content:"";position:absolute;left:-7px;top:22px;width:12px;height:12px;border-radius:50%;
-  background:#efb96e;border:3px solid var(--paper);box-shadow:0 0 0 1px #d5ae78}
-.life-groups{display:grid;gap:11px}.life-group{padding:13px 14px;border:1px solid var(--line-2);border-radius:14px;background:#faf8f2}
+  background:#777cad;border:3px solid var(--paper);box-shadow:0 0 0 1px #bfc1d4}
+.life-groups{display:grid;gap:11px}.life-group{padding:13px 14px;border:1px solid var(--line-2);border-radius:14px;background:#f8f8f6}
 .life-group-title{font-size:12.5px;font-weight:700;color:var(--muted);letter-spacing:.035em;margin-bottom:8px}
-.tagpick{gap:7px}.tagbtn{padding:9px 13px;background:#fff;border-color:#dad8e5;box-shadow:0 1px 1px rgba(35,33,59,.03)}
-.tagbtn.on{background:var(--accent);border-color:var(--accent);box-shadow:0 5px 12px rgba(91,91,214,.2)}
+.tagpick{gap:7px}.tagbtn{padding:9px 13px;background:#fff;border-color:#dadbdb;box-shadow:0 1px 1px rgba(29,31,35,.03)}
+.tagbtn.on{background:var(--accent);border-color:var(--accent);box-shadow:0 5px 12px rgba(90,95,158,.18)}
 .life-none{padding-left:2px}.life-none .tagbtn{background:transparent;box-shadow:none}
-.life-exhibit{border-color:#d9d6f3;background:linear-gradient(135deg,#fff 0%,#f1f0ff 100%)}
+.life-exhibit{border-color:var(--accent-line);background:linear-gradient(135deg,#fff 0%,#f7f7fa 100%)}
 .exhibit-kicker{font-size:10.5px!important;letter-spacing:.16em;font-weight:760;color:var(--accent)!important;margin-bottom:2px}
-.obs-card{border-color:#d6d3f4;background:linear-gradient(145deg,#fff 0%,#f3f2ff 100%)}
+.obs-card{border-color:var(--accent-line);background:linear-gradient(145deg,#fff 0%,#f7f7fa 100%)}
 .obs-pick{display:flex;gap:7px;flex-wrap:wrap}.obs-pick .tagbtn{padding:8px 11px}
 .source-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;
-  color:var(--accent-ink);background:#eeedff;border:1px solid #d5d2f3;white-space:nowrap}
-.source-badge.self{color:#765121;background:#fbf0df;border-color:#ead7b8}
+  color:var(--accent-ink);background:var(--accent-wash);border:1px solid var(--accent-line);white-space:nowrap}
+.source-badge.self{color:#5e6167;background:#f1f1ef;border-color:#dedfdf}
 .obs-scene{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:10px;align-items:start}
 .report-voices{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.report-voice{padding:13px 14px;border-radius:14px;
   border:1px solid var(--line-2);background:var(--surface-2)}.report-voice h5{font-size:12px;margin:0 0 8px;color:var(--accent-ink)}
@@ -477,17 +477,17 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 .moodbtn{border-radius:11px;background:#fff}.moodbtn.on{background:var(--accent);border-color:var(--accent)}
 .cellbox{height:36px;border-radius:9px;background:#faf8f1}.empty{padding:48px 20px}.empty b{font-size:16px}
 .auth{background:
-  radial-gradient(880px 540px at 16% -8%,rgba(208,229,220,.92),transparent 62%),
-  radial-gradient(720px 520px at 104% 105%,rgba(239,199,143,.3),transparent 58%),var(--paper)}
+  radial-gradient(880px 540px at 16% -8%,rgba(230,231,233,.94),transparent 62%),
+  radial-gradient(720px 520px at 104% 105%,rgba(90,95,158,.1),transparent 58%),var(--paper)}
 .auth .box{max-width:460px}.auth .box>.card,.gatecard{box-shadow:var(--shadow-md)}
 .gatecard{border-radius:20px;padding:24px 22px;min-height:190px}.gatecard .gi{width:52px;height:52px;border-radius:16px}
 .rolebtn{border-radius:15px;padding:16px}.modal{border:1px solid rgba(255,255,255,.55);border-radius:24px}
-.report{border-radius:22px;border-color:rgba(121,128,121,.2);box-shadow:var(--shadow);margin:0 auto}
+.report{border-radius:22px;border-color:rgba(82,85,90,.18);box-shadow:var(--shadow);margin:0 auto}
 .report .g4.keep{grid-template-columns:repeat(2,minmax(0,1fr))}
 .report .stat{min-height:116px;padding:18px 20px}
 .report .stat .n,.report .stat.compact .n{font-size:clamp(25px,3.4vw,32px);white-space:normal;overflow-wrap:anywhere}
 .report section>h4{border-left:0;padding-left:0;color:var(--accent-ink);font-size:16px}
-.report section>h4::after{content:"";display:block;width:28px;height:2px;background:#efb96e;margin-top:6px;border-radius:2px}
+.report section>h4::after{content:"";display:block;width:28px;height:2px;background:var(--accent);margin-top:6px;border-radius:2px}
 
 /* ══════════════════════════════════════════════════════════════════
    JP 디자인 시스템 · 반응형 모션 UX
@@ -497,13 +497,13 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
   background var(--dur-ui) var(--ease)}
 .stat .n{font-size:clamp(29px,2.2vw,38px)}
 .stat.compact .n{font-size:clamp(25px,1.9vw,33px);white-space:nowrap}
-.card:focus-within{border-color:#d1cff0;box-shadow:0 1px 2px rgba(35,33,59,.04),0 12px 30px rgba(35,33,59,.08)}
+.card:focus-within{border-color:var(--accent-line);box-shadow:0 1px 2px rgba(29,31,35,.04),0 12px 30px rgba(29,31,35,.08)}
 .btn{will-change:transform;transition:background var(--dur-ui) var(--ease),border-color var(--dur-ui) var(--ease),
   color var(--dur-ui) var(--ease),box-shadow var(--dur-ui) var(--ease),transform var(--dur-press) var(--ease-out)}
 .btn.is-busy{cursor:progress;box-shadow:none!important}
 @media (hover:hover) and (pointer:fine){
-  .btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(35,33,59,.09)}
-  .btn.pri:not(:disabled):hover{box-shadow:0 7px 16px rgba(91,91,214,.24)}
+  .btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 5px 12px rgba(29,31,35,.09)}
+  .btn.pri:not(:disabled):hover{box-shadow:0 7px 16px rgba(90,95,158,.21)}
   .moment:hover{transform:translateX(2px)}
 }
 .btn:not(:disabled):active{transform:translateY(0) scale(.97);box-shadow:none}
@@ -519,8 +519,8 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 @keyframes jpSelectSoft{from{background:transparent;transform:translateY(1px)}to{background:var(--accent-wash);transform:none}}
 
 .jp-changed{animation:jpChanged 920ms var(--ease-out) both!important}
-@keyframes jpChanged{0%{box-shadow:0 0 0 0 rgba(91,91,214,.3);background:var(--accent-wash)}
-  45%{box-shadow:0 0 0 5px rgba(91,91,214,.09)}100%{box-shadow:var(--shadow);background:var(--surface)}}
+@keyframes jpChanged{0%{box-shadow:0 0 0 0 rgba(90,95,158,.28);background:var(--accent-wash)}
+  45%{box-shadow:0 0 0 5px rgba(90,95,158,.08)}100%{box-shadow:var(--shadow);background:var(--surface)}}
 .jp-chart-line{stroke-dasharray:1;stroke-dashoffset:1;animation:jpDraw var(--dur-scene) var(--ease-out) forwards}
 .jp-chart-dot{opacity:0;animation:jpDot 180ms var(--ease-out) forwards;animation-delay:180ms}
 .jp-chart-bar{transform-box:fill-box;transform-origin:center bottom;animation:jpBar var(--dur-scene) var(--ease-out) both}
@@ -533,7 +533,7 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 .jp-skeleton::after{content:"";position:absolute;inset:0;transform:translateX(-105%);
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.62),transparent);animation:jpShimmer 1.25s ease-in-out infinite}
 .jp-boot{min-height:100vh;display:grid;grid-template-columns:274px minmax(0,1fr);background:var(--paper)}
-.jp-boot-side{padding:28px 20px;background:linear-gradient(165deg,#20203d,#101022)}
+.jp-boot-side{padding:28px 20px;background:linear-gradient(165deg,#292b30,#191b1f)}
 .jp-boot-side .jp-skeleton{background:rgba(255,255,255,.13)}
 .jp-boot-main{padding:24px 28px}.jp-boot-top{height:56px;max-width:360px;margin-bottom:30px}
 .jp-boot-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.jp-boot-card{height:132px}
@@ -584,7 +584,7 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.24.2"></script>
+<script src="skills.js?v=2026.08.24.3"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -637,7 +637,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.24.2';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.24.3';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -2152,7 +2152,7 @@ function schoolYears(){
 function demoBanner(side){
   const teacher = side==='teacher';
   return `<div class="noprint" style="padding:12px ${teacher?'28px':'28px'} 0">
-    <div class="card" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+    <div class="card" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
       <div class="card-b row" style="padding:11px 15px;gap:10px;flex-wrap:wrap">
         <span class="tag on">데모</span>
         <span class="small">${teacher
@@ -2265,7 +2265,7 @@ function diagHtml(list){
         <li><b>보안 규칙 미게시</b><br>Firestore → 규칙 탭에 <code>firestore.rules</code> 내용을 붙여넣고 <b>게시</b> 버튼을 눌렀는지 확인</li>
         <li><b>이전에 만든 계정이 남아있음</b><br>규칙 없이 가입해 프로필 문서가 안 만들어진 경우. <b>로그아웃하고 처음부터</b>를 누른 뒤 다시 학교를 등록하세요</li>
       </ol></div></div>`
-      :`<div class="card mt" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+      :`<div class="card mt" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
         <div class="card-b small" style="padding:11px 14px">모든 항목이 정상입니다.</div></div>`}`;
 }
 
@@ -2291,7 +2291,7 @@ function viewHost(){
   return `${topbar('호스트 콘솔','학교와 계정을 관리합니다 · 학생 정보는 표시되지 않습니다',
     `<button class="btn sm" data-act="loadschools">새로고침</button>`)}
   <div class="wrap" style="max-width:1000px">
-    <div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+    <div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
       <div class="card-b" style="padding:13px 16px">
         <b class="small">이 화면에서 볼 수 있는 것</b>
         <div class="tiny muted mt-s" style="line-height:1.85">
@@ -2454,7 +2454,7 @@ function viewDash(){
       ${stat(lifeCount,'학교생활 장면','<span class="muted tiny">최근 7일 · 관계와 역할 기록</span>')}
     </div>
     ${observationForm('',true)}
-    ${praise.length?`<div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash)">
+    ${praise.length?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash)">
       <div class="card-b"><b class="small" style="color:var(--accent-ink)">✦ 오늘 한마디 해주면 좋을 학생</b>
       <div class="tiny muted mb-s">공부를 많이 한 순서가 아닙니다. 처음 쓴 날, 오래 쉬다 돌아온 날, 이정표를 넘은 날 —
         말 한마디가 가장 크게 남는 순간들입니다.</div>
@@ -2684,7 +2684,7 @@ function recordForm(s,areaKey){
         ${areaKey==='haengteuk'&&!isHomeroomOf(s)?`<span class="tag warn" style="margin-left:auto">담임이 작성하는 항목입니다</span>`:''}</div>
       <div class="card-b">
         ${ht?`<div class="card mb" style="box-shadow:none;background:${htCount(ht)?'var(--accent-wash)':'var(--surface-2)'};
-          border-color:${htCount(ht)?'#d7d4f6':'var(--line)'}">
+          border-color:${htCount(ht)?'var(--accent-line)':'var(--line)'}">
           <div class="card-b" style="padding:12px 14px">
             ${htCount(ht)?`<b class="small" style="color:var(--accent-ink)">근거 ${htCount(ht)}건이 저절로 모였습니다</b>
               <div class="tiny muted mt-s" style="line-height:1.9">
@@ -2720,7 +2720,7 @@ function recordForm(s,areaKey){
             ${av?`<em style="color:var(--accent-ink)">자동으로 모은 근거 ${n}건 — 확인하고 고쳐주세요</em>`
                :(ht&&HT_AXES.some(x=>x.k===f.k)&&n?`<em>모인 근거 ${n}건</em>`:'')}</span>
           <textarea name="fields.${f.k}" placeholder="${esc(f.ph)}" rows="${av?Math.min(8,Math.max(3,htText(ht[f.k]).split('\n').length+1)):3}"
-            style="${av?'background:var(--accent-wash);border-color:#d7d4f6':''}">${esc(val)}</textarea>
+            style="${av?'background:var(--accent-wash);border-color:var(--accent-line)':''}">${esc(val)}</textarea>
           ${ht&&n&&String(r.fields?.[f.k]||'').trim()?`<button type="button" class="btn sm mt-s" data-act="htfill" data-k="${f.k}"
             style="align-self:flex-start">모인 근거 ${n}건 아래에 붙이기</button>`:''}</label>`;}).join('')}
         ${hits.length?`<div class="card" style="border-color:#eddac9;background:var(--warn-wash);box-shadow:none">
@@ -2783,7 +2783,6 @@ function panelJournal(s){
       series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});} }
   const bySub={}; last.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const diffs=last.flatMap(j=>(j.difficult||[]).map(d=>({...d,date:j.date})));
-  const seeds=js.filter(j=>j.seed);
   return `<div class="grid g2 mb" style="grid-template-columns:1.3fr 1fr;align-items:start">
     <div class="card"><div class="card-h"><h3>공부시간 추이</h3>
       <span class="sub">${weekly?'주별 · 최근 8주':'최근 14일'}</span>
@@ -2819,17 +2818,10 @@ function panelJournal(s){
             ${j.mood?`<span class="tag warn">${moodLabel(j.mood)}</span>`:''}</div>
           <div class="small mt-s">${esc(j.hard)}</div></div>`).join('')}</div></div>`:''}`; })()}
 
-  <div class="grid g2" style="align-items:start">
-    <div class="card"><div class="card-h"><h3>어려워한 내용</h3><span class="sub">${diffs.length}건</span></div>
-      <div class="card-b">${diffs.length?diffs.map(d=>`<div class="jlog">
-        <div class="spread"><span class="tag">${esc(d.subject)}</span><span class="tiny muted">${kdate(d.date)}</span></div>
-        <div class="small mt-s">${esc(d.content)}</div></div>`).join(''):'<div class="empty"><b>기록 없음</b></div>'}</div></div>
-    <div class="card"><div class="card-h"><h3>세특 소재 후보</h3></div>
-      <div class="card-b">${seeds.length?seeds.map(j=>`<div class="jlog">
-        <div class="spread"><span class="tiny muted">${kdate(j.date)}</span>
-        <button class="btn sm" data-act="seed2rec" data-jid="${j.id}">세특 입력란으로 →</button></div>
-        <div class="small mt-s">${esc(j.seed)}</div></div>`).join(''):'<div class="empty"><b>아직 없습니다</b>학생이 남긴 궁금증이 여기 모입니다.</div>'}</div></div>
-  </div>`;
+  <div class="card"><div class="card-h"><h3>어려워한 내용</h3><span class="sub">${diffs.length}건</span></div>
+    <div class="card-b">${diffs.length?diffs.map(d=>`<div class="jlog">
+      <div class="spread"><span class="tag">${esc(d.subject)}</span><span class="tiny muted">${kdate(d.date)}</span></div>
+      <div class="small mt-s">${esc(d.content)}</div></div>`).join(''):'<div class="empty"><b>기록 없음</b></div>'}</div></div>`;
 }
 
 /* ── 상담 패널 ── */
@@ -3492,7 +3484,7 @@ function studentWeek(s){
      <button class="btn sm" data-act="setmode" data-v="daily">매일 쓰기로</button>`)}
   <div class="wrap" style="max-width:700px">
     ${studentErrBanner()}${installCard()}
-    ${j.id?`<div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+    ${j.id?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
       <div class="card-b small" style="padding:11px 15px"><b>작성 완료</b> · 고치고 저장하면 덮어써집니다.</div></div>`:''}
     ${(()=>{const g=studyStats(s.id); return g.hours>=1?`<div class="card mb" style="box-shadow:none;background:var(--surface-2)">
       <div class="card-b row small" style="padding:11px 15px;gap:10px;flex-wrap:wrap">
@@ -3562,12 +3554,12 @@ function studentWrite(s){
      <button class="btn sm" data-act="setmode" data-v="weekly">주간으로 쓰기</button>`)}
   <div class="wrap" style="max-width:700px">
     ${studentErrBanner()}${installCard()}
-    ${j.id?`<div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+    ${j.id?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
       <div class="card-b row" style="padding:11px 15px;gap:10px;flex-wrap:wrap">
         <span class="tag on">작성 완료</span>
         <span class="small">${kdate(date)} 일지를 이미 썼습니다. 아래 내용을 고치고 저장하면 새로 생기지 않고 덮어써집니다.</span>
       </div></div>`:''}
-    ${g.streak>1?`<div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+    ${g.streak>1?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
       <div class="card-b small" style="padding:11px 15px">🔥 <b>${g.streak}일 연속</b> 기록 중입니다.${
         g.next?` 다음 이정표 <b>${g.next}시간</b>까지 ${hm(g.toNext)} 남았습니다.`:''}</div></div>`
       :missedY&&isToday?`<div class="card mb" style="border-color:#eddac9;background:var(--warn-wash);box-shadow:none">
@@ -4299,7 +4291,7 @@ function handle(act,el){
     try{
       const t0=Date.now();
       const out=await callClaude('한국어로만 답한다. 다른 말은 붙이지 않는다.','연결 확인이라고만 답해줘.',2000);
-      box.innerHTML=`<div class="card" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+      box.innerHTML=`<div class="card" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
         <div class="card-b small" style="padding:11px 13px">
           <b>${esc(PROVIDERS[p].name)} 연결 정상</b> · ${esc(settings.modelOf(p))} · ${((Date.now()-t0)/1000).toFixed(1)}초
           <div class="tiny muted mt-s">응답: ${esc(out.slice(0,60))}</div></div></div>`;
@@ -4716,7 +4708,7 @@ if('serviceWorker' in navigator && location.protocol!=='file:'){
 function installCard(){
   if(PWA.standalone() || PWA.installed || LS.get('gs.nopwa')) return '';
   if(location.protocol==='file:') return '';
-  return `<div class="card mb" style="border-color:#d7d4f6;background:var(--accent-wash);box-shadow:none">
+  return `<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
     <div class="card-b" style="padding:13px 15px">
       <div class="spread" style="align-items:flex-start;gap:10px">
         <div><b class="small">홈 화면에 앱으로 두면 훨씬 편합니다</b>
