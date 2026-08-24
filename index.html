@@ -462,6 +462,21 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
 .exhibit-kicker{font-size:10.5px!important;letter-spacing:.16em;font-weight:760;color:var(--accent)!important;margin-bottom:2px}
 .obs-card{border-color:var(--accent-line);background:linear-gradient(145deg,#fff 0%,#f7f7fa 100%)}
 .obs-pick{display:flex;gap:7px;flex-wrap:wrap}.obs-pick .tagbtn{padding:8px 11px}
+.obs-suggest-zone{margin:15px 0 16px;padding:15px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.72)}
+.obs-suggest-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px}
+.obs-suggest-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.obs-suggest{display:flex;align-items:flex-start;gap:9px;width:100%;min-height:50px;padding:11px 12px;border:1px solid var(--line);
+  border-radius:12px;background:#fff;color:var(--ink-2);text-align:left;cursor:pointer;font-size:14px;line-height:1.55;
+  transition:transform var(--dur-press) var(--ease-out),border-color var(--dur-ui) var(--ease),box-shadow var(--dur-ui) var(--ease),background var(--dur-ui) var(--ease)}
+.obs-suggest::before{content:'＋';display:grid;place-items:center;flex:none;width:20px;height:20px;margin-top:1px;border-radius:7px;
+  background:var(--accent-wash);color:var(--accent-ink);font-size:13px;font-weight:800}
+.obs-suggest:active{transform:scale(.985)}
+.obs-suggest-empty{font-size:13.5px;color:var(--muted);line-height:1.65}
+.obs-write-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.obs-write-head>span{font-size:14.5px;font-weight:650;color:var(--ink-2)}
+.obs-mic.is-listening{background:#303238;border-color:#303238;color:#fff;box-shadow:0 0 0 4px rgba(90,95,158,.12)}
+@media (hover:hover) and (pointer:fine){.obs-suggest:hover{transform:translateY(-1px);border-color:var(--accent-line);
+  background:#fbfbfd;box-shadow:0 5px 14px rgba(29,31,35,.07)}}
 .source-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;
   color:var(--accent-ink);background:var(--accent-wash);border:1px solid var(--accent-line);white-space:nowrap}
 .source-badge.self{color:#5e6167;background:#f1f1ef;border-color:#dedfdf}
@@ -551,6 +566,8 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
     padding:6px 5px calc(6px + env(safe-area-inset-bottom))}
   .mob button.on{border-radius:12px}.moment{grid-template-columns:64px minmax(0,1fr)}.moment time{display:none}
   .obs-scene{grid-template-columns:72px minmax(0,1fr)}.obs-scene time{display:none}
+  .obs-suggest-list{grid-template-columns:1fr}.obs-suggest-head{align-items:flex-start;flex-direction:column;gap:3px}
+  .obs-write-head{align-items:flex-start;flex-direction:column}.obs-mic{width:100%;justify-content:center}
   .report-voices{grid-template-columns:1fr}
   .jp-boot{grid-template-columns:1fr}.jp-boot-side{display:none}.jp-boot-main{padding:20px 15px}
   .jp-boot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.jp-boot-card{height:112px}
@@ -584,7 +601,7 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.24.3"></script>
+<script src="skills.js?v=2026.08.24.4"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -637,7 +654,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.24.3';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.24.4';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -1198,6 +1215,72 @@ const OBS_TAGS = [
   {k:'rule',label:'규칙 준수',axis:'repeat'}, {k:'retry',label:'수정·재시도',axis:'overcome'},
 ];
 const OBS_LABEL = Object.fromEntries(OBS_TAGS.map(t=>[t.k,t.label]));
+/* 추상적인 태도를 학생 평가로 남기지 않고, 실제로 눈에 보인 행동으로 바꾸어 기록합니다.
+   두 태도를 함께 고르면 두 특징이 동시에 드러나는 문장을 먼저 보여줍니다. */
+const OBS_BEHAVIORS = [
+  {id:'care-listen-1',tags:['care','listen'],text:'친구의 말을 끊지 않고 끝까지 들은 뒤 필요한 도움을 물었습니다.'},
+  {id:'care-listen-2',tags:['care','listen'],text:'소외된 친구에게 먼저 다가가 이야기를 들어주었습니다.'},
+  {id:'care-listen-3',tags:['care','listen'],text:'말하기 어려워하는 친구에게 발언 기회를 주고 답할 때까지 기다렸습니다.'},
+  {id:'care-listen-adjust',tags:['care','listen','adjust'],text:'갈등 상황에서 양쪽 이야기를 차례로 들은 뒤 공통점을 찾아주었습니다.'},
+  {id:'care-listen-speak',tags:['care','listen','speak'],text:'친구의 의견을 자신의 말로 다시 확인하고 존중할 부분을 짚어주었습니다.'},
+  {id:'care-help-1',tags:['care','help'],text:'준비물을 챙기지 못한 친구에게 필요한 것을 나누어주었습니다.'},
+  {id:'care-help-2',tags:['care','help'],text:'활동에서 뒤처진 친구에게 먼저 다가가 함께 마무리했습니다.'},
+  {id:'care-help-3',tags:['care','help'],text:'아픈 친구의 상태를 살피고 선생님에게 알려주었습니다.'},
+  {id:'care-retry',tags:['care','retry'],text:'친구가 실수했을 때 탓하지 않고 다시 해볼 수 있도록 기다려주었습니다.'},
+  {id:'care-1',tags:['care'],text:'자리를 찾지 못한 친구에게 먼저 공간을 내어주었습니다.'},
+  {id:'listen-adjust-1',tags:['listen','adjust'],text:'의견이 갈리자 친구들의 이유를 차례로 듣고 공통된 생각을 정리했습니다.'},
+  {id:'listen-adjust-2',tags:['listen','adjust'],text:'서로 다른 의견을 요약해 확인한 뒤 모두가 받아들일 방법을 제안했습니다.'},
+  {id:'listen-speak',tags:['listen','speak'],text:'친구의 발표를 끝까지 듣고 내용과 연결되는 질문을 했습니다.'},
+  {id:'listen-1',tags:['listen'],text:'친구의 말을 끊지 않고 끝까지 들었습니다.'},
+  {id:'listen-2',tags:['listen'],text:'의견이 다른 친구에게 그렇게 생각한 이유를 먼저 물었습니다.'},
+  {id:'help-1',tags:['help'],text:'어려워하는 친구에게 풀이 순서를 차근차근 설명했습니다.'},
+  {id:'help-2',tags:['help'],text:'도움을 요청한 친구에게 필요한 부분을 확인하고 바로 도와주었습니다.'},
+  {id:'help-role',tags:['help','role'],text:'모둠원이 놓친 일을 함께 챙겨 활동을 제시간에 마쳤습니다.'},
+  {id:'speak-1',tags:['speak'],text:'근거를 들어 자신의 의견을 분명하게 말했습니다.'},
+  {id:'speak-2',tags:['speak'],text:'이해하지 못한 부분을 솔직하게 질문하고 다시 확인했습니다.'},
+  {id:'speak-participate',tags:['speak','participate'],text:'모둠 논의가 막혔을 때 새로운 질문을 던져 대화를 이어갔습니다.'},
+  {id:'adjust-1',tags:['adjust'],text:'여러 의견의 공통점을 찾아 한 문장으로 정리했습니다.'},
+  {id:'adjust-2',tags:['adjust'],text:'의견이 갈리자 말할 순서를 정해 모두의 이야기를 들을 수 있게 했습니다.'},
+  {id:'adjust-speak',tags:['adjust','speak'],text:'서로 다른 제안을 합쳐 새로운 해결 방법을 제시했습니다.'},
+  {id:'role-prepare-1',tags:['role','prepare'],text:'맡은 역할에 필요한 자료를 미리 준비해 정해진 시간까지 마쳤습니다.'},
+  {id:'role-prepare-2',tags:['role','prepare'],text:'활동 전에 해야 할 일을 확인하고 모둠의 준비 상태를 점검했습니다.'},
+  {id:'role-participate',tags:['role','participate'],text:'비어 있는 역할이 생기자 먼저 맡아 활동을 이어갔습니다.'},
+  {id:'role-1',tags:['role'],text:'자신이 맡은 역할을 마무리 정리까지 책임지고 수행했습니다.'},
+  {id:'role-2',tags:['role'],text:'모둠에서 해야 할 일을 나누고 진행 상황을 확인했습니다.'},
+  {id:'participate-care',tags:['participate','care'],text:'활동을 망설이는 친구가 자연스럽게 참여할 수 있도록 도와주었습니다.'},
+  {id:'participate-listen',tags:['participate','listen'],text:'자신이 먼저 참여하면서도 다른 친구의 의견을 들을 시간을 마련했습니다.'},
+  {id:'participate-1',tags:['participate'],text:'질문이나 활동에 먼저 손을 들어 참여했습니다.'},
+  {id:'participate-2',tags:['participate'],text:'모둠 활동에 필요한 아이디어를 먼저 제안했습니다.'},
+  {id:'prepare-1',tags:['prepare'],text:'수업 전에 필요한 준비물을 미리 꺼내 놓았습니다.'},
+  {id:'prepare-2',tags:['prepare'],text:'제출 기한을 확인하고 정해진 때에 과제를 냈습니다.'},
+  {id:'prepare-rule',tags:['prepare','rule'],text:'활동 순서와 시간을 미리 확인하고 약속한 절차에 맞게 준비했습니다.'},
+  {id:'rule-1',tags:['rule'],text:'차례와 약속된 시간을 지키며 활동했습니다.'},
+  {id:'rule-2',tags:['rule'],text:'공동 사용 물품을 사용한 뒤 제자리에 정리했습니다.'},
+  {id:'rule-care',tags:['rule','care'],text:'학급 약속을 놓친 친구에게 조용히 알려주었습니다.'},
+  {id:'retry-1',tags:['retry'],text:'피드백을 듣고 틀린 부분을 스스로 찾아 다시 고쳤습니다.'},
+  {id:'retry-2',tags:['retry'],text:'처음 방법이 잘되지 않자 다른 방법으로 다시 시도했습니다.'},
+  {id:'retry-care',tags:['retry','care'],text:'실수를 인정하고 상대에게 사과한 뒤 행동을 바로 고쳤습니다.'},
+  {id:'retry-role',tags:['retry','role'],text:'잘되지 않았던 역할을 다시 연습해 끝까지 수행했습니다.'},
+];
+function obsSuggestions(tags){
+  const selected=[...new Set(tags||[])].filter(k=>OBS_LABEL[k]);
+  if(!selected.length) return [];
+  return OBS_BEHAVIORS.map((b,i)=>{
+    const matches=selected.filter(k=>b.tags.includes(k)).length;
+    return {...b,_i:i,_matches:matches,_all:selected.every(k=>b.tags.includes(k)),_extra:b.tags.filter(k=>!selected.includes(k)).length};
+  }).filter(b=>b._matches).sort((a,b)=>
+    Number(b._all)-Number(a._all)||b._matches-a._matches||a._extra-b._extra||a._i-b._i
+  ).slice(0,8);
+}
+function obsSuggestionHtml(tags){
+  const selected=[...new Set(tags||[])].filter(k=>OBS_LABEL[k]);
+  if(!selected.length) return `<div class="obs-suggest-zone"><div class="obs-suggest-empty">
+    <b>태도를 먼저 선택해보세요.</b><br>배려·경청처럼 여러 개를 고르면 함께 드러난 행동을 먼저 보여드립니다.</div></div>`;
+  const list=obsSuggestions(selected), names=selected.map(k=>OBS_LABEL[k]).join(' · ');
+  return `<div class="obs-suggest-zone"><div class="obs-suggest-head"><b class="small">${esc(names)} 행동 문장</b>
+    <span class="tiny muted">문장을 누르면 바로 기록됩니다</span></div>
+    <div class="obs-suggest-list">${list.map(b=>`<button type="button" class="obs-suggest" data-act="obsquick" data-bid="${b.id}">${esc(b.text)}</button>`).join('')}</div></div>`;
+}
 // 고른 태그를 세어 봅니다 (별일 없었다는 세지 않습니다)
 function tagCount(js){
   const c={};
@@ -2857,7 +2940,7 @@ function observationForm(selectedId='',compact=false){
         ${st.map(s=>`<option value="${s.id}">${esc(s.name)} · ${scode(s)}</option>`).join('')}</select></label>`;
   return `<div class="card obs-card mb"><div class="card-h">
     <div><div class="tiny muted exhibit-kicker">TEACHER OBSERVATION</div><h3>학교생활 한 장면 기록</h3></div>
-    <span class="sub" style="margin-left:auto">학생 선택 → 태그 → 한 줄이면 끝</span></div>
+    <span class="sub" style="margin-left:auto">학생 → 태도 → 행동 문장 선택</span></div>
     <form class="obsform"><div class="card-b">
       <div class="grid ${selectedId?'g2':'g3'}" style="gap:0 10px">
         ${who}
@@ -2869,11 +2952,53 @@ function observationForm(selectedId='',compact=false){
       <div class="f"><span>눈에 띈 태도 <em>여러 개 선택 가능</em></span>
         <div class="obs-pick">${OBS_TAGS.map(t=>`<button type="button" class="tagbtn" data-act="obstag" data-k="${t.k}"
           aria-pressed="false">${t.label}</button>`).join('')}</div></div>
-      <label class="f"><span>무슨 일이 있었나요?</span>
-        <textarea name="summary" rows="${compact?2:3}" maxlength="240" placeholder="예) 모둠 의견이 갈리자 친구들의 말을 차례로 듣고 공통점을 정리해 발표했습니다."></textarea></label>
-      <div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn pri" data-act="saveobs">관찰 기록 저장</button>
+      <div class="obs-suggest-wrap" aria-live="polite">${obsSuggestionHtml([])}</div>
+      <div class="f"><div class="obs-write-head"><span>딱 맞는 행동이 없나요?</span>
+        <button type="button" class="btn sm obs-mic" data-act="obsvoice" aria-pressed="false">🎙 음성으로 말하기</button></div>
+        <textarea name="summary" rows="${compact?2:3}" maxlength="240" placeholder="직접 쓰거나 음성으로 말해보세요. 예) 모둠 의견이 갈리자 친구들의 말을 차례로 듣고 공통점을 정리했습니다."></textarea>
+        <div class="tiny muted mt-s">음성으로 입력한 문장은 화면에서 확인한 뒤 저장해주세요.</div></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn pri" data-act="saveobs">직접 쓴 문장 저장</button>
         <span class="tiny muted">학생 자기기록과 구분되어 담임 코멘트·행특의 직접 근거로 활용됩니다.</span></div>
     </div></form></div>`;
+}
+
+async function saveObservationForm(form,summaryOverride=''){
+  if(!form) throw new Error('관찰 입력 화면을 찾지 못했습니다.');
+  const f=new FormData(form), studentId=String(f.get('studentId')||'').trim();
+  const summary=String(summaryOverride||f.get('summary')||'').trim();
+  const tags=String(f.get('tags')||'').split(',').filter(Boolean);
+  if(!studentId) throw new Error('학생을 먼저 선택해주세요.');
+  if(!summary) throw new Error('관찰한 행동을 선택하거나 한 줄로 적어주세요.');
+  await DB.put('counsels',{studentId,date:f.get('date')||today(),kind:'교사 관찰',
+    context:String(f.get('context')||'학교생활'),tags,summary,promise:'',next:'',source:'teacher',
+    observerName:S.me?.name||'',observerUid:S.uid||''});
+  return {studentId,summary,name:student(studentId)?.name||'학생'};
+}
+
+function startObservationVoice(btn){
+  const form=btn?.closest('.obsform'), area=form?.querySelector('[name=summary]');
+  if(!area) return;
+  if(btn._obsRecognition){ btn._obsRecognition.stop(); return; }
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition){ toast('이 브라우저에서는 음성 입력을 지원하지 않습니다. Chrome이나 Edge에서 다시 시도해주세요.',5000,'error'); return; }
+  const recognition=new SpeechRecognition(), before=area.value.trim(), old=btn.innerHTML;
+  recognition.lang='ko-KR'; recognition.interimResults=true; recognition.continuous=false;
+  btn._obsRecognition=recognition;
+  recognition.onstart=()=>{ btn.classList.add('is-listening'); btn.setAttribute('aria-pressed','true'); btn.innerHTML='● 듣는 중 · 누르면 종료'; };
+  recognition.onresult=e=>{
+    let heard=''; for(let i=0;i<e.results.length;i++) heard+=e.results[i][0].transcript+' ';
+    const next=(before?before+' ':'')+heard.trim(), max=Number(area.maxLength)||240;
+    area.value=next.slice(0,max); area.focus();
+  };
+  recognition.onerror=e=>{
+    const msg=e.error==='not-allowed'?'마이크 권한을 허용해야 음성 입력을 사용할 수 있습니다.'
+      :e.error==='no-speech'?'음성을 듣지 못했습니다. 마이크 가까이에서 다시 말해주세요.'
+      :e.error==='audio-capture'?'사용할 수 있는 마이크를 찾지 못했습니다.'
+      :'음성 입력을 시작하지 못했습니다. 잠시 후 다시 시도해주세요.';
+    toast(msg,5000,'error');
+  };
+  recognition.onend=()=>{ btn.classList.remove('is-listening'); btn.setAttribute('aria-pressed','false'); btn.innerHTML=old; btn._obsRecognition=null; };
+  try{ recognition.start(); }catch(e){ btn._obsRecognition=null; toast('음성 입력을 시작하지 못했습니다.',4000,'error'); }
 }
 
 function panelCounsel(s){
@@ -3939,16 +4064,14 @@ function handle(act,el){
     const k=el.dataset.k, cur=(box.value||'').split(',').filter(Boolean);
     const next=cur.includes(k)?cur.filter(x=>x!==k):[...cur,k]; box.value=next.join(',');
     form.querySelectorAll('[data-act=obstag]').forEach(b=>{
-      const on=next.includes(b.dataset.k); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); }); },
-  saveobs(){ busy(el,async()=>{ const form=el.closest('.obsform'), f=new FormData(form);
-    const studentId=String(f.get('studentId')||'').trim(), summary=String(f.get('summary')||'').trim();
-    const tags=String(f.get('tags')||'').split(',').filter(Boolean);
-    if(!studentId){ toast('학생을 선택해주세요'); return; }
-    if(!summary){ toast('관찰한 장면을 한 줄로 적어주세요'); return; }
-    await DB.put('counsels',{studentId,date:f.get('date')||today(),kind:'교사 관찰',
-      context:String(f.get('context')||'학교생활'),tags,summary,promise:'',next:'',source:'teacher',
-      observerName:S.me?.name||'',observerUid:S.uid||''});
-    toast('학교생활 관찰을 저장했습니다'); render(); }); },
+      const on=next.includes(b.dataset.k); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); });
+    const wrap=form.querySelector('.obs-suggest-wrap'); if(wrap){ wrap.innerHTML=obsSuggestionHtml(next); bind(); } },
+  obsquick(){ const behavior=OBS_BEHAVIORS.find(b=>b.id===el.dataset.bid); if(!behavior) return;
+    busy(el,async()=>{ const saved=await saveObservationForm(el.closest('.obsform'),behavior.text);
+      toast(`${saved.name} 학생의 행동을 바로 기록했습니다`,3500); render(); }); },
+  obsvoice(){ startObservationVoice(el); },
+  saveobs(){ busy(el,async()=>{ const saved=await saveObservationForm(el.closest('.obsform'));
+    toast(`${saved.name} 학생의 학교생활 관찰을 저장했습니다`,3500); render(); }); },
   savecounsel(){ busy(el,async()=>{ const f=new FormData($('#cform'));
     if(!f.get('summary').trim()){ toast('상담 내용을 입력해주세요'); return; }
     await DB.put('counsels',{studentId:S.sel,date:f.get('date'),kind:f.get('kind'),

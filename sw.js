@@ -8,7 +8,7 @@
    예전에 배포한 파일을 계속 쓰는 사고를 막기 위해서입니다.
    항상 새 파일을 먼저 받아보고, 못 받을 때만 지난번 것을 씁니다.
    Firebase 통신은 아예 건드리지 않습니다. */
-const CACHE = 'girokshil-v5';
+const CACHE = 'girokshil-v6';
 const SHELL = ['./', './index.html', './skills.js', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
