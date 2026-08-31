@@ -601,7 +601,7 @@ td{padding:13px 14px}tbody tr:last-child td{border-bottom:0}
   <option value="사회문화"><option value="정치와 법"><option value="윤리와 사상"><option value="세계사">
 </datalist>
 
-<script src="skills.js?v=2026.08.24.4"></script>
+<script src="skills.js?v=2026.08.31.1"></script>
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    기록실 · 학생 기록과 학습일지 관리
@@ -654,7 +654,7 @@ function parseConfig(text){
   return o;
 }
 
-const BUILD='2026.08.24.4';   // 배포한 파일이 최신인지 확인하는 표시
+const BUILD='2026.08.31.1';   // 배포한 파일이 최신인지 확인하는 표시
 const LEVELS = ['프리미엄','A','B','C','D','E'];
 
 /* ── AI 제공자 3종 ──
@@ -771,6 +771,12 @@ const BANNED_OUT = [
 ];
 
 /* ───────────── 유틸 ───────────── */
+/* 화면 갱신 타이밍. 오래된 웹뷰나 requestAnimationFrame이 없는 환경에서도
+   앱 전체가 멈추지 않도록 감싸 둡니다. 애니메이션은 부수적인 기능이지,
+   이것 때문에 화면이 안 뜨면 안 됩니다. */
+const raf = cb => (typeof requestAnimationFrame==='function')
+  ? requestAnimationFrame(cb) : setTimeout(()=>cb(Date.now()),16);
+
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const ENC = new TextEncoder();
@@ -1036,6 +1042,16 @@ async function diagnose(){
 
 /* 완성된 특기사항을 엑셀 한 권으로 — 영역마다 시트 하나씩.
    NEIS에 옮길 때 학번 순서 그대로여야 실수가 없습니다. */
+/* 교육과정표 저장 — 학교 문서 안에 둡니다.
+   따로 컬렉션을 만들면 보안 규칙을 또 고쳐야 하는데, 규칙 재게시는 매번 사고가 나던 지점입니다.
+   과목 200개라도 20KB 남짓이라 문서 하나에 넉넉히 들어갑니다. */
+async function saveCurriculum(list){
+  S.school.curriculum=list;
+  if(DB.cloud){ const {doc,setDoc}=FB.fs;
+    await setDoc(doc(FB.db,'schools',S.school.id),{curriculum:list},{merge:true});
+  } else LS.set('gs.demo.curriculum',JSON.stringify(list));
+}
+
 async function dumpRecords(keys){
   const X=await loadXLSX(), wb=X.utils.book_new();
   const st=students(); let total=0;
@@ -1150,19 +1166,28 @@ const allStudents = () => C.students.slice().sort((a,b)=>a.grade-b.grade||a.klas
 const student  = id => C.students.find(s=>s.id===id);
 const recs     = f => C.records.filter(r=>Object.entries(f).every(([k,v])=>r[k]===v)
                         && Number(r.year||S.school?.currentYear||schoolYear())===curYear());
-// 같은 날짜에 두 건 이상 있으면 마지막에 저장한 것만 보여줍니다
+// 같은 날짜·같은 기록 방식에 두 건 이상 있으면 마지막 저장본만 보여줍니다.
+// 일간 월요일 기록과 그 주의 주간 기록은 서로 다른 기록이므로 함께 보존합니다.
 function jrn(f){
   const list=C.journals.filter(j=>Object.entries(f).every(([k,v])=>j[k]===v));
   const best=new Map();
-  list.forEach(j=>{ const k=j.studentId+'|'+j.date; const cur=best.get(k);
+  list.forEach(j=>{ const k=j.studentId+'|'+j.date+'|'+(j.type==='weekly'?'weekly':'daily'); const cur=best.get(k);
     if(!cur || (j.updatedAt||0)>=(cur.updatedAt||0)) best.set(k,j); });
   return [...best.values()].sort((a,b)=>b.date.localeCompare(a.date));
 }
-// 같은 학생·같은 날짜에 쌓인 중복 건수
+// 통계용 기록. 한 주의 주간 기록이 있으면 그 주의 일간 기록은 원문으로만 남기고
+// 공부시간·과목 합계에서는 빼서 전환 전후 기록이 이중 합산되지 않게 합니다.
+function numericJournals(list){
+  const weeks=list.filter(j=>j.type==='weekly');
+  return list.filter(j=>j.type==='weekly' || !weeks.some(w=>
+    w.studentId===j.studentId && j.date>=w.date && j.date<=addDays(w.date,6)));
+}
+// 같은 학생·같은 날짜·같은 기록 방식에 쌓인 중복 건수
 function dupCount(sid){
   const seen=new Set(); let n=0;
   C.journals.filter(j=>!sid||j.studentId===sid).forEach(j=>{
-    const k=j.studentId+'|'+j.date; if(seen.has(k)) n++; else seen.add(k); });
+    const k=j.studentId+'|'+j.date+'|'+(j.type==='weekly'?'weekly':'daily');
+    if(seen.has(k)) n++; else seen.add(k); });
   return n;
 }
 /* ── 성취 ──
@@ -1180,6 +1205,72 @@ function dupCount(sid){
    질문은 매일 같습니다. 질문을 바꾸면 대답은 쉬워지지만 기록이 뒤죽박죽이 되어
    리포트에서도 행특에서도 무슨 맥락인지 알 수 없게 됩니다.
    질문은 고정하고, 고를 것을 여럿 두어 지루하지 않게 하는 쪽을 택했습니다. */
+/* ═══════════ 교육과정 · 계열 ═══════════
+   고교학점제에서 과목 선택은 아이들이 가장 막막해하는 대목입니다.
+   다만 이 화면은 "너는 이 과를 못 간다"를 알려주는 곳이 아닙니다.
+   그런 판정은 정확할 수도 없고(대학·학과·연도마다 다릅니다) 해서도 안 됩니다.
+
+   여기서 하는 일은 두 가지뿐입니다.
+   ① 자기가 고른 조합이 어떤 모습인지 눈으로 보게 한다
+   ② 그 계열에서 자주 권하는 과목 중 아직 안 고른 것을 알려준다
+   나머지는 담임과 이야기할 몫입니다. 그래서 결론이 아니라 상담 재료로 만들었습니다.
+
+   ※ 개별 대학·학과의 권장과목은 넣지 않았습니다. 해마다 바뀌고, 틀린 정보가 들어가면
+     없는 것보다 나쁩니다. 대교협이 대학별 자료를 공개하니 그쪽을 함께 보시길 권합니다. */
+const TRACKS = [
+  {k:'humanities', label:'인문',   desc:'국어국문·사학·철학·어문 계열',
+   core:['문학','독서와 작문','화법과 언어'],
+   want:['주제 탐구 독서','윤리와 사상','인문학과 윤리','세계사','언어생활 탐구','독서 토론과 글쓰기']},
+  {k:'social', label:'사회',   desc:'경영·경제·정치외교·심리·행정 계열',
+   core:['확률과 통계','사회와 문화'],
+   want:['경제','정치','법과 사회','국제 관계의 이해','사회문제 탐구','실용 통계','금융과 경제생활','경제 수학']},
+  {k:'science', label:'자연',   desc:'수학·물리·화학·생명·지구과학 계열',
+   core:['미적분Ⅱ','대수'],
+   want:['기하','물리학','화학','생명과학','지구과학','역학과 에너지','물질과 에너지','세포와 물질대사','수학과제 탐구']},
+  {k:'engineering', label:'공학',   desc:'기계·전기전자·컴퓨터·화공·건축 계열',
+   core:['미적분Ⅱ','물리학'],
+   want:['기하','화학','전자기와 양자','역학과 에너지','인공지능 수학','정보','융합과학 탐구','수학과제 탐구']},
+  {k:'medical', label:'의약·보건', desc:'의예·치의예·약학·간호·보건 계열',
+   core:['화학','생명과학'],
+   want:['미적분Ⅱ','세포와 물질대사','생물의 유전','물질과 에너지','화학 반응의 세계','확률과 통계']},
+  {k:'edu', label:'교육',   desc:'교육학·초등교육·각 교과 사범 계열',
+   core:['문학'],
+   want:['교육의 이해','사회와 문화','현대사회와 윤리','주제 탐구 독서','확률과 통계']},
+  {k:'art', label:'예체능', desc:'미술·음악·체육·디자인 계열',
+   core:[],
+   want:['미술','음악','체육','미술 창작','음악 연주와 창작','스포츠 과학','매체 의사소통']},
+];
+const TRACK = Object.fromEntries(TRACKS.map(t=>[t.k,t]));
+const SUBJ_AREAS = ['국어','수학','영어','사회','과학','한국사','체육·예술','기술·가정/정보','제2외국어·한문','교양'];
+const SUBJ_KINDS = ['공통','일반선택','진로선택','융합선택'];
+
+// 학교 교육과정표 (학교 문서 안에 둡니다 — 보안 규칙을 건드리지 않기 위해서입니다)
+const curri = () => (S.school?.curriculum||[]).filter(x=>x&&x.name);
+const curriYears = () => [...new Set(curri().map(c=>Number(c.grade)||1))].sort();
+// 과목명이 서로 조금씩 달라도 알아보게 (공백·로마숫자 표기 차이)
+const norm = t => String(t||'').replace(/\s+/g,'').replace(/[ⅠI]/g,'1').replace(/[ⅡII]/g,'2').toLowerCase();
+const findSubj = name => curri().find(c=>norm(c.name)===norm(name));
+// 학생이 고른 과목 (students 문서의 profile 안에 둡니다 — 역시 규칙을 건드리지 않기 위해서)
+const picksOf = s => (s?.profile?.picks||[]).filter(Boolean);
+function pickStat(s){
+  const ids=picksOf(s), got=ids.map(id=>curri().find(c=>c.id===id)).filter(Boolean);
+  const credit=got.reduce((a,b)=>a+(Number(b.credit)||0),0);
+  const byArea={}; got.forEach(c=>{ const k=c.area||'기타'; byArea[k]=(byArea[k]||0)+(Number(c.credit)||0); });
+  const byGrade={}; got.forEach(c=>{ const k=Number(c.grade)||1; byGrade[k]=(byGrade[k]||0)+(Number(c.credit)||0); });
+  return {got,credit,byArea,byGrade};
+}
+/* 계열 대조 — 있고 없고만 봅니다. 점수를 매기지 않습니다. */
+function trackCheck(s,tk){
+  const t=TRACK[tk]; if(!t) return null;
+  const mine=new Set(picksOf(s).map(id=>{const c=curri().find(x=>x.id===id); return c?norm(c.name):'';}));
+  const look=list=>list.map(n=>({
+    name:n,
+    got:mine.has(norm(n)),
+    offered:!!findSubj(n),          // 우리 학교가 여는 과목인가
+  }));
+  return {track:t, core:look(t.core), want:look(t.want)};
+}
+
 const LIFE_TAGS = [
   {k:'help',       label:'친구를 도왔다',          axis:'inter',    group:'together'},
   {k:'helped',     label:'도움을 받았다',          axis:'inter',    group:'together'},
@@ -1304,7 +1395,7 @@ const hasProfile = s => PROFILE_FIELDS.some(f=>String(s?.profile?.[f.k]||'').tri
 const MILESTONES = [10,30,50,100,200,300,500,1000];
 const MEDALS = { 10:'🌱', 30:'🌿', 50:'🔥', 100:'💯', 200:'⭐', 300:'🏅', 500:'🏆', 1000:'👑' };
 function studyStats(sid){
-  const js=jrn({studentId:sid});
+  const js=numericJournals(jrn({studentId:sid}));
   const totalMin=js.reduce((a,b)=>a+(Number(b.totalMinutes)||0),0);
   const hours=Math.floor(totalMin/60);
   const done=MILESTONES.filter(m=>hours>=m);
@@ -1342,7 +1433,7 @@ function praiseList(st){
   st.forEach(s=>{
     const weekly = s.logMode==='weekly';
     const js=jrn({studentId:s.id}).filter(j=>inYear(j.date));
-    const t=js.find(j=> weekly ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today());
+    const t=js.find(j=> weekly ? (j.type==='weekly'&&j.date===wk(today())) : (j.type!=='weekly'&&j.date===today()));
     if(!t) return;                                   // 오늘(이번 주) 안 썼으면 대상이 아닙니다
     const g=studyStats(s.id), reasons=[];
 
@@ -1415,21 +1506,22 @@ function htEvidence(sid){
 
   // 오래된 것부터 — 변화를 보려면 순서가 있어야 합니다
   const js=jrn({studentId:sid}).filter(j=>inYear(j.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  const nums=numericJournals(js);
   const cs=consultations(sid).filter(c=>inYear(c.date)).sort((a,b)=>a.date.localeCompare(b.date));
   const os=observations(sid).filter(c=>inYear(c.date)).sort((a,b)=>a.date.localeCompare(b.date));
   const g=studyStats(sid);
   if(!js.length && !cs.length && !os.length) return ev;
 
-  const first=js[0]?.date, last=js[js.length-1]?.date;
+  const first=nums[0]?.date, last=nums[nums.length-1]?.date;
   const span=first? Math.max(1,Math.round((new Date(last)-new Date(first))/86400000)+1) : 0;
 
   /* ── 반복행동 ── 계산으로 확인되는 것만 */
-  if(js.length>=3){
-    const rate=Math.round(js.length/span*7*10)/10;
-    add('repeat',`학습일지를 스스로 ${js.length}일 기록함 (${kfull(first).slice(6).trim()}부터 ${span}일 동안, 주 평균 ${rate}일)`,last);
+  if(nums.length>=3){
+    const rate=Math.round(nums.length/span*7*10)/10;
+    add('repeat',`학습일지를 스스로 ${nums.length}회 기록함 (${kfull(first).slice(6).trim()}부터 ${span}일 동안, 주 평균 ${rate}회)`,last);
     if(g.best>=5) add('repeat',`가장 길게 이어간 연속 기록 ${g.best}일${g.streak>=5?`, 현재도 ${g.streak}일째 이어감`:''}`,last);
   }
-  const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name; bySub[k]=(bySub[k]||0)+(Number(x.minutes)||0);}));
+  const bySub={}; nums.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name; bySub[k]=(bySub[k]||0)+(Number(x.minutes)||0);}));
   const tot=Object.values(bySub).reduce((a,b)=>a+b,0);
   const rank=Object.entries(bySub).sort((a,b)=>b[1]-a[1]);
   if(tot>0 && rank.length){
@@ -1510,7 +1602,7 @@ function htEvidence(sid){
   js.forEach(j=>(j.difficult||[]).forEach(d=>{ const k=d.subject;
     if(k && !diffFirst[k]) diffFirst[k]={date:j.date,content:d.content}; }));
   Object.entries(diffFirst).forEach(([sub,info])=>{
-    const mins=(from,to)=>js.filter(j=>j.date>=from&&j.date<to)
+    const mins=(from,to)=>nums.filter(j=>j.date>=from&&j.date<to)
       .reduce((a,j)=>a+(j.subjects||[]).filter(x=>(x.group||x.name)===sub).reduce((p,q)=>p+(Number(q.minutes)||0),0),0);
     const before=mins(addDays(info.date,-14),info.date), after=mins(info.date,addDays(info.date,15));
     if(after>0 && after>=before*1.3 && after-before>=60)
@@ -1518,8 +1610,8 @@ function htEvidence(sid){
   });
   // 상담에서 한 약속이 실제로 지켜졌는가
   cs.filter(c=>String(c.promise||'').trim()).slice(-3).forEach(c=>{
-    const aft=js.filter(j=>j.date>c.date&&j.date<=addDays(c.date,21));
-    const bef=js.filter(j=>j.date<=c.date&&j.date>addDays(c.date,-21));
+    const aft=nums.filter(j=>j.date>c.date&&j.date<=addDays(c.date,21));
+    const bef=nums.filter(j=>j.date<=c.date&&j.date>addDays(c.date,-21));
     const av=a=>a.length?Math.round(a.reduce((x,y)=>x+(Number(y.totalMinutes)||0),0)/a.length):0;
     if(aft.length>=3 && bef.length>=3 && av(aft)>av(bef)*1.15)
       add('overcome',`상담에서 "${cut(c.promise,36)}" 약속을 한 뒤, 3주간 일평균 공부시간이 ${hm(av(bef))}에서 ${ro(hm(av(aft)))} 늘어남`,c.date);
@@ -1528,9 +1620,9 @@ function htEvidence(sid){
   });
 
   /* ── 변화 ── 처음 4주와 최근 4주를 견줍니다 */
-  if(span>=35 && js.length>=10){
+  if(span>=35 && nums.length>=10){
     const e0=first, e1=addDays(first,28), l0=addDays(last,-27);
-    const early=js.filter(j=>j.date>=e0&&j.date<e1), late=js.filter(j=>j.date>=l0);
+    const early=nums.filter(j=>j.date>=e0&&j.date<e1), late=nums.filter(j=>j.date>=l0);
     if(early.length>=3 && late.length>=3){
       const av=(a,f)=>{const v=a.map(f).filter(x=>x>0); return v.length?v.reduce((x,y)=>x+y,0)/v.length:0;};
       const m0=av(early,j=>Number(j.totalMinutes)||0), m1=av(late,j=>Number(j.totalMinutes)||0);
@@ -1602,6 +1694,49 @@ const yearOfDate = d => { const [Y,M]=String(d).split('-').map(Number); return M
 // 브리핑·담임 코멘트는 학생이 읽을 수 없는 별도 컬렉션에 둔다 (문서 id = studentId)
 const brief    = sid => C.briefs.find(b=>b.id===sid)||{};
 
+/* 데모용 교육과정표 — 실제 학교 것은 선생님이 엑셀로 올립니다.
+   2022 개정 교육과정 과목명을 따랐고, 시연에 필요한 만큼만 추렸습니다. */
+function demoCurriculum(){
+  const R=[
+    [1,1,'국어','공통국어1',4,'공통',1],[1,2,'국어','공통국어2',4,'공통',1],
+    [1,1,'수학','공통수학1',4,'공통',1],[1,2,'수학','공통수학2',4,'공통',1],
+    [1,1,'영어','공통영어1',4,'공통',1],[1,2,'영어','공통영어2',4,'공통',1],
+    [1,1,'사회','통합사회1',3,'공통',1],[1,2,'사회','통합사회2',3,'공통',1],
+    [1,1,'과학','통합과학1',3,'공통',1],[1,2,'과학','통합과학2',3,'공통',1],
+    [1,1,'한국사','한국사1',3,'공통',1],[1,2,'한국사','한국사2',3,'공통',1],
+
+    [2,1,'국어','문학',4,'일반선택',0],[2,1,'국어','독서와 작문',4,'일반선택',0],[2,2,'국어','화법과 언어',4,'일반선택',0],
+    [2,1,'수학','대수',4,'일반선택',0],[2,2,'수학','미적분Ⅰ',4,'일반선택',0],[2,2,'수학','확률과 통계',4,'일반선택',0],
+    [2,1,'영어','영어Ⅰ',4,'일반선택',0],[2,2,'영어','영어Ⅱ',4,'일반선택',0],
+    [2,1,'사회','세계시민과 지리',4,'일반선택',0],[2,1,'사회','사회와 문화',4,'일반선택',0],
+    [2,2,'사회','현대사회와 윤리',4,'일반선택',0],[2,2,'사회','세계사',4,'일반선택',0],
+    [2,1,'과학','물리학',4,'일반선택',0],[2,1,'과학','화학',4,'일반선택',0],
+    [2,2,'과학','생명과학',4,'일반선택',0],[2,2,'과학','지구과학',4,'일반선택',0],
+    [2,1,'체육·예술','체육1',2,'일반선택',1],[2,1,'체육·예술','음악',2,'일반선택',0],[2,2,'체육·예술','미술',2,'일반선택',0],
+    [2,1,'기술·가정/정보','정보',3,'일반선택',0],
+
+    [3,1,'국어','주제 탐구 독서',3,'진로선택',0],[3,1,'국어','문학과 영상',3,'진로선택',0],
+    [3,2,'국어','독서 토론과 글쓰기',3,'융합선택',0],
+    [3,1,'수학','미적분Ⅱ',3,'진로선택',0],[3,1,'수학','기하',3,'진로선택',0],
+    [3,2,'수학','인공지능 수학',3,'진로선택',0],[3,2,'수학','경제 수학',3,'진로선택',0],
+    [3,2,'수학','수학과제 탐구',3,'융합선택',0],[3,2,'수학','실용 통계',3,'융합선택',0],
+    [3,1,'영어','영어 독해와 작문',3,'일반선택',0],[3,2,'영어','영미 문학 읽기',3,'진로선택',0],
+    [3,1,'사회','경제',3,'진로선택',0],[3,1,'사회','정치',3,'진로선택',0],[3,1,'사회','법과 사회',3,'진로선택',0],
+    [3,1,'사회','윤리와 사상',3,'진로선택',0],[3,2,'사회','인문학과 윤리',3,'진로선택',0],
+    [3,2,'사회','국제 관계의 이해',3,'진로선택',0],[3,2,'사회','사회문제 탐구',3,'융합선택',0],
+    [3,2,'사회','금융과 경제생활',3,'융합선택',0],
+    [3,1,'과학','역학과 에너지',3,'진로선택',0],[3,1,'과학','물질과 에너지',3,'진로선택',0],
+    [3,1,'과학','세포와 물질대사',3,'진로선택',0],[3,2,'과학','전자기와 양자',3,'진로선택',0],
+    [3,2,'과학','화학 반응의 세계',3,'진로선택',0],[3,2,'과학','생물의 유전',3,'진로선택',0],
+    [3,2,'과학','융합과학 탐구',3,'융합선택',0],
+    [3,1,'교양','교육의 이해',2,'진로선택',0],
+    [3,1,'체육·예술','체육2',2,'일반선택',1],
+  ];
+  return R.map(([g,sem,area,name,credit,kind,req])=>({
+    id:`c${g}${sem}-${norm(name).slice(0,24)}`, grade:g, semester:sem, area, name,
+    credit, kind, required:!!req }));
+}
+
 /* ───────────── 데모 시드 ───────────── */
 function seed(){
   const names=['강도윤','김서아','박지호','이하늘','정민재','최유진','한소율','황시우'];
@@ -1623,7 +1758,23 @@ function seed(){
         strong:'딱히 없는 것 같다',weak:'전반적으로 집중이 잘 안 된다',goal:'일단 매일 일지 쓰기',
         worry:'조별 과제에서 말을 못 꺼내겠고, 뭘 좋아하는지도 모르겠다'},
   };
-  st.forEach(x=>{ if(DEMO_PROFILE[x.id]){ x.profile=DEMO_PROFILE[x.id]; x.profileAt=Date.now()-86400000*5; } });
+  // 몇 명은 과목을 골라본 상태로 두어, 교사 화면에서 바로 확인할 수 있게 합니다
+  const DEMO_PICKS = {
+    s2:{track:'medical', names:['문학','대수','확률과 통계','영어Ⅰ','화학','생명과학','세포와 물질대사','생물의 유전','정보']},
+    s1:{track:'engineering', names:['대수','미적분Ⅰ','물리학','화학','미적분Ⅱ','기하','정보','인공지능 수학']},
+    s5:{track:'', names:['문학','영어Ⅰ','사회와 문화']},
+  };
+  st.forEach(x=>{
+    const pf=DEMO_PROFILE[x.id]?{...DEMO_PROFILE[x.id]}:null;
+    const dp=DEMO_PICKS[x.id];
+    if(dp){
+      const cur=demoCurriculum();
+      const ids=dp.names.map(n=>cur.find(c=>norm(c.name)===norm(n))?.id).filter(Boolean);
+      const base=pf||{};
+      base.picks=ids; if(dp.track) base.track=dp.track;
+      x.profile=base; x.profileAt=Date.now()-86400000*3;
+    } else if(pf){ x.profile=pf; x.profileAt=Date.now()-86400000*5; }
+  });
   const subs=['확률과 통계','영어Ⅰ','생명과학Ⅰ','한국사','문학'];
   const hard=[['확률과 통계','조건부확률에서 사건 순서가 헷갈림'],['확률과 통계','정규분포 표준화 계산이 자꾸 틀림'],
     ['생명과학Ⅰ','흥분 전도 속도 그래프 해석'],['생명과학Ⅰ','가계도에서 반성유전 판별'],
@@ -1678,7 +1829,8 @@ async function loadXLSX(){
     document.head.appendChild(s); });
   XLSX=window.XLSX; return XLSX;
 }
-const SHEET={ students:'학생명단', sekteuk:'세특', dongari:'동아리', jayul:'자율', jinro:'진로', haengteuk:'행특' };
+const SHEET={ students:'학생명단', curriculum:'교육과정', sekteuk:'세특', dongari:'동아리', jayul:'자율', jinro:'진로', haengteuk:'행특' };
+const CUR_HEAD=['학년','학기','교과(군)','과목명','학점','구분','필수'];
 const HEAD_COMMON=['학번','이름','수준','목표byte'];
 const areaHead = k => [...HEAD_COMMON, ...(AREAS[k].meta||[]).map(m=>m.label), ...AREAS[k].fields.map(f=>f.label)];
 
@@ -1699,6 +1851,13 @@ async function downloadTemplate(withData){
     ['접속코드는 그대로 유지되므로 학생은 쓰던 코드로 계속 로그인합니다.'],
     ['접속코드를 비우면 새로운 학생으로 등록되고 코드가 새로 발급됩니다.'],[],
     ['학년도 열을 비우면 지금 보고 있는 학년도로 들어갑니다.'],[],
+    ['[교육과정 시트]'],
+    ['우리 학교가 여는 과목을 적어두면 학생들이 과목 선택을 해볼 수 있습니다.'],
+    ['학년 1~3, 학기 1~2, 학점은 숫자로 적습니다.'],
+    ['구분은 공통 / 일반선택 / 진로선택 / 융합선택 중 하나입니다.'],
+    ['필수 열에 O 를 적으면 학생이 뺄 수 없는 과목이 됩니다. 비우면 선택 과목입니다.'],
+    ['과목명은 교육과정 문서에 있는 이름 그대로 적어주세요. 로마숫자(Ⅰ Ⅱ)와 아라비아숫자는 알아서 맞춥니다.'],
+    ['이 시트를 올리면 기존 교육과정표는 새 내용으로 통째로 바뀝니다(덧붙이지 않습니다).'],[],
     ['교육부 훈령상 기재 금지 항목(대회 수상, 어학시험, 논문, 자격증, 부모 직업 등)은 적지 마세요.'],
   ];
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(guide), '사용법');
@@ -1708,6 +1867,20 @@ async function downloadTemplate(withData){
                : [[Y,3,2,1,'','']])];
   const ws=X.utils.aoa_to_sheet(sRows); ws['!cols']=[{wch:8},{wch:6},{wch:6},{wch:6},{wch:12},{wch:12}];
   X.utils.book_append_sheet(wb,ws,SHEET.students);
+
+  {
+    const cur=(S.school?.curriculum||[]);
+    const rows=[CUR_HEAD, ...(cur.length&&withData
+      ? cur.map(c=>[c.grade,c.semester,c.area,c.name,c.credit,c.kind,c.required?'O':''])
+      : [[1,1,'국어','공통국어1',4,'공통','O'],
+         [2,1,'수학','대수',4,'일반선택',''],
+         [2,1,'과학','물리학',4,'일반선택',''],
+         [3,1,'수학','미적분Ⅱ',4,'진로선택',''],
+         [3,1,'과학','세포와 물질대사',4,'진로선택','']])];
+    const w=X.utils.aoa_to_sheet(rows);
+    w['!cols']=[{wch:6},{wch:6},{wch:14},{wch:26},{wch:7},{wch:11},{wch:6}];
+    X.utils.book_append_sheet(wb,w,SHEET.curriculum);
+  }
 
   for(const k of AREA_KEYS){
     const head=areaHead(k);
@@ -1755,6 +1928,26 @@ async function parseWorkbook(file){
     out.sheets.push(`${SHEET.students} : ${parts.join(', ')||'변경 없음'}`);
   }
 
+  // 교육과정표 — 통째로 갈아끼웁니다
+  const cSheet=wb.Sheets[SHEET.curriculum];
+  if(cSheet){
+    const rows=X.utils.sheet_to_json(cSheet,{defval:''});
+    const list=[]; const seen=new Set();
+    rows.forEach(r=>{
+      const name=String(r['과목명']||'').trim(); if(!name) return;
+      const g=Number(r['학년'])||1, sem=Number(r['학기'])||1;
+      const key=`${g}-${sem}-${norm(name)}`; if(seen.has(key)) return; seen.add(key);
+      list.push({ id:`c${g}${sem}-${norm(name).slice(0,24)}`, grade:g, semester:sem,
+        area:String(r['교과(군)']||'').trim()||'기타', name,
+        credit:Number(r['학점'])||0, kind:String(r['구분']||'').trim()||'일반선택',
+        required:/^[oO０ㅇ예yY]/.test(String(r['필수']||'').trim()) });
+    });
+    if(list.length){ out.curriculum=list;
+      const req=list.filter(x=>x.required).length;
+      out.sheets.push(`${SHEET.curriculum} : 과목 ${list.length}개 (필수 ${req}개) — 기존 표를 이 내용으로 바꿉니다`);
+    }
+  }
+
   for(const k of AREA_KEYS){
     const sh=wb.Sheets[SHEET[k]]; if(!sh) continue;
     const rows=X.utils.sheet_to_json(sh,{defval:''});
@@ -1782,6 +1975,7 @@ async function parseWorkbook(file){
 }
 
 async function applyWorkbook(parsed){
+  if(parsed.curriculum?.length) await saveCurriculum(parsed.curriculum);
   for(const s of parsed.newStudents) await addStudent(s);
   for(const p of (parsed.promote||[])){ const s=student(p.id); if(s) await enrollStudent(s,p); }
   let saved=0, missed=[];
@@ -1926,9 +2120,10 @@ async function genBriefing(id){
 function briefContext(id,includeSensitive,days){
   const N=Number(days)||28, from=addDays(today(),-(N-1));
   const js=jrn({studentId:id}).filter(j=>j.date>=from);
-  const w1=js.filter(j=>j.date>=addDays(today(),-6)), w2=js.filter(j=>j.date<addDays(today(),-6)&&j.date>=addDays(today(),-13));
+  const nums=numericJournals(js);
+  const w1=nums.filter(j=>j.date>=addDays(today(),-6)), w2=nums.filter(j=>j.date<addDays(today(),-6)&&j.date>=addDays(today(),-13));
   const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y.totalMinutes,0)/a.length):0;
-  const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
+  const bySub={}; nums.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const diffs=js.flatMap(j=>(j.difficult||[]).map(d=>`${d.subject}: ${d.content}`));
   const seeds=js.filter(j=>j.seed).map(j=>j.seed);
   const memos=js.filter(j=>j.memo).slice(0,8).map(j=>`${j.date} ${j.memo}`);
@@ -1958,7 +2153,7 @@ function briefContext(id,includeSensitive,days){
   const g=studyStats(id);
   return [
     `[기록 기간] ${from} ~ ${today()} (${N}일). 이 기간 안의 기록만 아래에 담겨 있습니다.`,
-    `[학습일지 작성] ${N}일 중 ${js.length}일 작성`,
+    `[학습일지 작성] 최근 ${N}일 동안 ${nums.length}회 작성`,
     `[누적 성취] 전체 누적 공부시간 ${g.hours}시간 · 기록한 날 ${g.daysWritten}일 · 현재 연속 ${g.streak}일 (최장 ${g.best}일)`,
     `[학생이 스스로 적은 소개]\n${pfLines.length?pfLines.join('\n'):'- 아직 적지 않았습니다. 진로 연계 안내는 생략한다.'}`,
     ...(includeSensitive && String(pf.worry||'').trim()
@@ -2005,11 +2200,11 @@ const JP_MOTION={
     if(!node) return;
     const original=node.data, m=original.match(/-?\d+(?:\.\d+)?/); if(!m) return;
     const decimals=(m[0].split('.')[1]||'').length, prefix=original.slice(0,m.index), suffix=original.slice(m.index+m[0].length);
-    const started=performance.now(), duration=320;
+    const started=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now(), duration=320;
     const tick=now=>{ const p=Math.min(1,(now-started)/duration), eased=1-Math.pow(1-p,3);
       const value=target*eased; node.data=prefix+(decimals?value.toFixed(decimals):Math.round(value).toLocaleString('ko-KR'))+suffix;
-      if(p<1) requestAnimationFrame(tick); else node.data=original; };
-    requestAnimationFrame(tick);
+      if(p<1) raf(tick); else node.data=original; };
+    raf(tick);
   },
   added(el){
     if(!el||this.reduced()||!el.animate) return;
@@ -2017,8 +2212,8 @@ const JP_MOTION={
       {duration:240,easing:'cubic-bezier(.22,1,.36,1)'});
   },
   after(previous,sceneChanged){
-    if(sceneChanged) window.scrollTo({top:0,left:0,behavior:'instant'});
-    requestAnimationFrame(()=>{
+    if(sceneChanged) window.scrollTo?.({top:0,left:0,behavior:'instant'});
+    raf(()=>{
       if(this.reduced()){ jpChangedPending=null; return; }
 
       if(sceneChanged){
@@ -2494,13 +2689,14 @@ function viewDash(){
     <button class="btn pri" data-act="nav" data-v="settings" style="margin:0 auto;display:flex">학생 등록하러 가기</button>
     </div></div></div>`;
   const scoped=new Set(st.map(x=>x.id));
-  const recent=C.journals.filter(j=>j.date>=addDays(today(),-6)&&inYear(j.date)&&scoped.has(j.studentId));
+  const recentAll=jrn({}).filter(j=>j.date>=addDays(today(),-6)&&inYear(j.date)&&scoped.has(j.studentId));
+  const recent=numericJournals(recentAll);
   const obsRecent=C.counsels.filter(c=>isObservation(c)&&c.date>=addDays(today(),-6)&&inYear(c.date)&&scoped.has(c.studentId))
     .sort((a,b)=>b.date.localeCompare(a.date)||(b.updatedAt||0)-(a.updatedAt||0));
   const avg=recent.length?Math.round(recent.reduce((a,b)=>a+b.totalMinutes,0)/recent.length):0;
-  const lifeCount=recent.reduce((n,j)=>n+(j.tags||[]).filter(k=>k!=='none').length,0)+obsRecent.length;
-  const lifeTop=Object.entries(tagCount(recent)).sort((a,b)=>b[1]-a[1]).slice(0,6);
-  const lifeMoments=recent.filter(j=>String(j.good||'').trim()).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+  const lifeCount=recentAll.reduce((n,j)=>n+(j.tags||[]).filter(k=>k!=='none').length,0)+obsRecent.length;
+  const lifeTop=Object.entries(tagCount(recentAll)).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const lifeMoments=recentAll.filter(j=>String(j.good||'').trim()).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
   // 주간 모드 학생은 "이번 주에 썼는가"로 봅니다
   const thisWeek=wk(today());
   const wroteD=new Set(C.journals.filter(j=>j.date===today()&&j.type!=='weekly').map(j=>j.studentId));
@@ -2510,18 +2706,19 @@ function viewDash(){
   // 쓴 학생도 보여줍니다 — 안 쓴 사람만 보이면 재촉만 하게 됩니다
   const done=st.filter(s=>!missing.includes(s)).map(s=>{
     const j=jrn({studentId:s.id}).find(x=> s.logMode==='weekly'
-      ? (x.type==='weekly'&&x.date===wk(today())) : x.date===today());
+      ? (x.type==='weekly'&&x.date===wk(today())) : (x.type!=='weekly'&&x.date===today()));
     return {s, j, fill:jFill(j), seed:!!String(j?.seed||'').trim(), min:Number(j?.totalMinutes)||0};
   });
   const praise=praiseList(st);
   const totalCells=Math.max(1,st.length*areaKeys().length),
     doneCells=C.records.filter(r=>r.status==='done'&&scoped.has(r.studentId)&&Number(r.year||curYear())===curYear()).length;
-  const series=[]; for(let i=6;i>=0;i--){const d=addDays(today(),-i),day=C.journals.filter(j=>j.date===d&&scoped.has(j.studentId));
+  const series=[]; for(let i=6;i>=0;i--){const d=addDays(today(),-i),day=recent.filter(j=>j.date===d);
     series.push({label:kdate(d).slice(0,-3),value:day.length?Math.round(day.reduce((a,b)=>a+b.totalMinutes,0)/day.length):0,n:day.length});}
-  const diff={}; recent.forEach(j=>(j.difficult||[]).forEach(d=>diff[d.subject]=(diff[d.subject]||0)+1));
+  const diff={}; recentAll.forEach(j=>(j.difficult||[]).forEach(d=>diff[d.subject]=(diff[d.subject]||0)+1));
   const diffTop=Object.entries(diff).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const drop=st.map(s=>{ const a=C.journals.filter(j=>j.studentId===s.id&&j.date>=addDays(today(),-6)&&inYear(j.date));
-    const b=C.journals.filter(j=>j.studentId===s.id&&j.date<addDays(today(),-6)&&j.date>=addDays(today(),-13));
+  const drop=st.map(s=>{ const all=numericJournals(jrn({studentId:s.id}).filter(j=>inYear(j.date)));
+    const a=all.filter(j=>j.date>=addDays(today(),-6));
+    const b=all.filter(j=>j.date<addDays(today(),-6)&&j.date>=addDays(today(),-13));
     const av=x=>x.length?x.reduce((p,q)=>p+q.totalMinutes,0)/x.length:0;
     return {s,now:av(a),prev:av(b)};}).filter(x=>x.prev>30&&x.now<x.prev*0.65).sort((a,b)=>(a.now/a.prev)-(b.now/b.prev));
 
@@ -2685,10 +2882,10 @@ function viewStudents(){
           <th style="text-align:center;width:110px">누적</th><th style="text-align:center;width:60px">상담</th>
           <th style="width:96px">접속코드</th><th style="width:64px"></th></tr></thead>
         <tbody>${st.map(s=>{
-          const js=C.journals.filter(j=>j.studentId===s.id&&j.date>=addDays(today(),-6)&&inYear(j.date));
+          const js=numericJournals(jrn({studentId:s.id}).filter(j=>j.date>=addDays(today(),-6)&&inYear(j.date)));
           const tot=js.reduce((a,b)=>a+b.totalMinutes,0), cn=couns(s.id).length, g=studyStats(s.id);
           const wroteToday=C.journals.some(j=>j.studentId===s.id&&(s.logMode==='weekly'
-            ? (j.type==='weekly'&&j.date===wk(today())) : j.date===today()));
+            ? (j.type==='weekly'&&j.date===wk(today())) : (j.type!=='weekly'&&j.date===today())));
           return `<tr data-motion-key="students-${s.id}">
             <td><button class="btn ghost sm" data-act="open" data-id="${s.id}" style="padding:2px 4px">
               <span class="dot ${wroteToday?'on':''}" title="${wroteToday?'오늘 작성함':'오늘 아직 안 씀'}"></span>
@@ -2856,11 +3053,12 @@ function recordForm(s,areaKey){
 /* ── 학습일지 패널 ── */
 function panelJournal(s){
   const js=jrn({studentId:s.id}).filter(j=>inYear(j.date));
+  const nums=numericJournals(js);
   const weekly=s.logMode==='weekly'||js.some(j=>j.type==='weekly');
-  const last=js.filter(j=>j.date>=addDays(today(),weekly?-55:-13));
+  const last=nums.filter(j=>j.date>=addDays(today(),weekly?-55:-13));
   const series=[];
   if(weekly){ for(let i=7;i>=0;i--){ const w0=addDays(wk(today()),-7*i);
-      const inw=js.filter(x=>x.type==='weekly'? x.date===w0 : (x.date>=w0&&x.date<=addDays(w0,6)));
+      const inw=nums.filter(x=>x.date>=w0&&x.date<=addDays(w0,6));
       series.push({label:kdate(w0).slice(0,-3),value:inw.reduce((a,b)=>a+(b.totalMinutes||0),0)}); } }
   else { for(let i=13;i>=0;i--){const d=addDays(today(),-i),j=js.find(x=>x.date===d);
       series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});} }
@@ -2882,7 +3080,7 @@ function panelJournal(s){
     return `<div class="grid g2 mb" style="align-items:start">
       <div class="card"><div class="card-h"><h3>컨디션 추이</h3>
         <span class="sub">${moods.length?`최근 ${moods.length}일 평균 ${avg.toFixed(1)} · ${moodLabel(Math.round(avg))}`:'기록 없음'}</span></div>
-        <div class="card-b">${moods.length?moodStrip(js):'<div class="empty">아직 컨디션 기록이 없습니다.</div>'}</div></div>
+        <div class="card-b">${moods.length?moodStrip(nums):'<div class="empty">아직 컨디션 기록이 없습니다.</div>'}</div></div>
       <div class="card"><div class="card-h"><h3>좋았던 일 · 잘한 일</h3><span class="sub">${goods.length}건</span>
         ${goods.length?`<button class="btn sm" data-act="good2haeng" style="margin-left:auto">행특 입력란으로</button>`:''}</div>
         <div class="card-b">${goods.length?goods.slice(0,8).map(j=>`<div class="jlog">
@@ -2923,6 +3121,20 @@ function profileCard(s){
     <span class="sub" style="margin-left:auto">${s.profileAt?kfull(dstr(new Date(s.profileAt)))+' 갱신':''}</span></div>
     <div class="card-b">
       ${PROFILE_OPEN.map(row).join('')}
+      ${(()=>{ if(!curri().length) return '';
+        const ps=pickStat(s), tk=pf.track;
+        if(!ps.got.length && !tk) return '';
+        const chk=tk?trackCheck(s,tk):null;
+        const miss=chk?[...chk.core,...chk.want].filter(x=>!x.got&&x.offered):[];
+        return `<div style="border-top:1px solid var(--line-2);padding-top:12px;margin-top:4px;margin-bottom:11px">
+          <div class="tiny muted">과목 선택 연습 ${tk?`· 관심 계열 <b>${TRACK[tk].label}</b>`:''}</div>
+          <div class="small">${ps.got.length}과목 ${ps.credit}학점 —
+            ${Object.entries(ps.byArea).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`${k} ${v}`).join(' · ')||'아직 없음'}</div>
+          ${miss.length?`<div class="tiny mt-s" style="color:var(--warn);line-height:1.8">
+            ${TRACK[tk].label} 계열에서 자주 권하는데 아직 안 고른 과목 —
+            ${miss.map(x=>esc(x.name)).join(', ')}
+            <div class="muted" style="margin-top:3px">상담 때 왜 안 골랐는지 물어볼 만합니다. 못 간다는 뜻은 아닙니다.</div></div>`:''}
+        </div>`; })()}
       ${String(pf.worry||'').trim()?`<div style="border-top:1px solid var(--line-2);padding-top:12px;margin-top:4px">
         ${row(PROFILE_FIELDS.find(f=>f.k==='worry'))}
         <div class="tiny muted">이 내용은 학부모 리포트와 AI 생성에 넘기지 않습니다.</div></div>`:''}
@@ -3056,27 +3268,29 @@ function panelCounsel(s){
 function reportData(s,R){
   const from=R.from, to=R.to, days=rangeDays(R);
   const js=jrn({studentId:s.id}).filter(j=>j.date>=from&&j.date<=to);
+  const nums=numericJournals(js);
   const unique=(list,key)=>{const seen=new Set();return list.filter(x=>{const k=key(x);if(seen.has(k))return false;seen.add(k);return true;});};
   const series=[];
   if(days>35){ // 기간이 길면 주 단위로 묶어 봅니다
     for(let w0=wk(from); w0<=to; w0=addDays(w0,7)){
-      const inw=js.filter(x=>x.date>=w0&&x.date<=addDays(w0,6));
+      const inw=nums.filter(x=>x.date>=w0&&x.date<=addDays(w0,6));
       series.push({label:kdate(w0).slice(0,-3),value:inw.reduce((a,b)=>a+(b.totalMinutes||0),0)}); }
   } else {
-    for(let i=days-1;i>=0;i--){const d=addDays(to,-i),j=js.find(x=>x.date===d);
+    for(let i=days-1;i>=0;i--){const d=addDays(to,-i),j=nums.find(x=>x.date===d);
       series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});}
   }
-  const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
-  const tot=js.reduce((a,b)=>a+b.totalMinutes,0);
-  return {from,to,days,js,series,bySub,tot,
-    avg:js.length?Math.round(tot/js.length):0,
+  const bySub={}; nums.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
+  const tot=nums.reduce((a,b)=>a+b.totalMinutes,0);
+  const weekly=nums.some(j=>j.type==='weekly'), expected=weekly?Math.ceil(days/7):days;
+  return {from,to,days,js,series,bySub,tot,count:nums.length,expected,weekly,
+    avg:nums.length?Math.round(tot/nums.length):0,
     diffs:unique(js.flatMap(j=>(j.difficult||[]).map(d=>({...d,date:j.date}))),d=>`${d.subject}|${d.content}`),
     seeds:unique(js.filter(j=>j.seed).map(j=>({seed:j.seed,date:j.date})),x=>x.seed),
     goods:unique(js.filter(j=>j.good).map(j=>({good:j.good,date:j.date})),x=>x.good),
     lifeTags:Object.entries(tagCount(js)).sort((a,b)=>b[1]-a[1]),
     teacherObs:observations(s.id).filter(o=>o.date>=from&&o.date<=to),
     // 힘들었던 일은 리포트에 담지 않습니다. 교사 화면에서만 봅니다.
-    moods:js.filter(j=>j.mood).map(j=>Number(j.mood)),
+    moods:nums.filter(j=>j.mood).map(j=>Number(j.mood)),
     acts:AREA_KEYS.map(k=>{const r=recs({studentId:s.id,area:k})[0];
       const v=Object.values(r?.fields||{}).filter(x=>String(x||'').trim());
       return v.length?{name:AREAS[k].name,text:v.join(' ')}:null;}).filter(Boolean)};
@@ -3159,8 +3373,8 @@ function renderReport(s,d,note,forParent,advice,career){
     <section><h4>학습 기록 한눈에 보기</h4>
       <div class="grid g4 keep">
         ${stat(hm(d.tot),'총 공부시간')}
-        ${stat(`${d.js.length}일`,'기록한 날',`<span class="tiny muted">${Math.round(d.js.length/d.days*100)}% 성실도</span>`)}
-        ${stat(hm(d.avg),'기록한 날 평균')}
+        ${stat(`${d.count}회`,'기록 횟수',`<span class="tiny muted">${Math.min(100,Math.round(d.count/d.expected*100))}% 기록</span>`)}
+        ${stat(hm(d.avg),'기록 1회 평균')}
         ${d.moods.length
           ? stat((d.moods.reduce((a,b)=>a+b,0)/d.moods.length).toFixed(1),'평균 컨디션',
               `<span class="tiny muted">5점 만점 · ${d.moods.length}일 기록</span>`)
@@ -3194,15 +3408,17 @@ function renderReport(s,d,note,forParent,advice,career){
 function viewJournal(){
   const st=students(), days=Number(S.filter.days||14), from=addDays(today(),-(days-1));
   const scoped=new Set(st.map(x=>x.id));
-  const js=C.journals.filter(j=>j.date>=from&&inYear(j.date)&&scoped.has(j.studentId));
-  const series=[]; for(let i=days-1;i>=0;i--){const d=addDays(today(),-i),day=js.filter(j=>j.date===d);
+  const js=jrn({}).filter(j=>j.date>=from&&inYear(j.date)&&scoped.has(j.studentId));
+  const nums=numericJournals(js);
+  const series=[]; for(let i=days-1;i>=0;i--){const d=addDays(today(),-i),day=nums.filter(j=>j.date===d);
     series.push({label:new Date(d).getDate(),value:day.length?Math.round(day.reduce((a,b)=>a+b.totalMinutes,0)/day.length):0});}
-  const bySub={}; js.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
+  const bySub={}; nums.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const diffs=js.flatMap(j=>(j.difficult||[]).map(d=>({...d,date:j.date,sid:j.studentId})));
   const byDiff={}; diffs.forEach(d=>(byDiff[d.subject]=byDiff[d.subject]||[]).push(d));
   const seeds=js.filter(j=>j.seed);
-  const rank=st.map(s=>{const m=js.filter(j=>j.studentId===s.id);
-    return {s,days:m.length,tot:m.reduce((a,b)=>a+b.totalMinutes,0)};}).sort((a,b)=>b.tot-a.tot);
+  const rank=st.map(s=>{const m=nums.filter(j=>j.studentId===s.id);
+    return {s,days:m.length,expected:s.logMode==='weekly'?Math.ceil(days/7):days,
+      tot:m.reduce((a,b)=>a+b.totalMinutes,0)};}).sort((a,b)=>b.tot-a.tot);
   return `${topbar('학습일지 분석','반 전체 학습 상황',
     `<select style="width:auto" data-act="days">${[7,14,30,60].map(n=>`<option value="${n}" ${n===days?'selected':''}>최근 ${n}일</option>`).join('')}</select>`)}
   <div class="wrap">
@@ -3227,10 +3443,10 @@ function viewJournal(){
           <button class="btn sm mt-s" data-act="open" data-id="${j.studentId}" data-tab="sekteuk">세특 작성으로 →</button></div>`).join('')
           :'<div class="empty"><b>아직 없습니다</b></div>'}</div></div>
       <div class="card"><div class="card-h"><h3>학생별 기록 성실도</h3><span class="sub">최근 ${days}일</span></div>
-        <div style="overflow-x:auto"><table><thead><tr><th>학생</th><th style="text-align:right">작성일</th><th style="text-align:right">총 공부시간</th></tr></thead>
+        <div style="overflow-x:auto"><table><thead><tr><th>학생</th><th style="text-align:right">기록 횟수</th><th style="text-align:right">총 공부시간</th></tr></thead>
         <tbody>${rank.map(r=>`<tr>
           <td><button class="btn ghost sm" data-act="open" data-id="${r.s.id}" data-tab="journal" style="padding:2px 4px">${esc(r.s.name)}</button></td>
-          <td style="text-align:right">${r.days<days*0.5?`<span class="tag warn">${r.days}/${days}</span>`:`<span class="muted mono">${r.days}/${days}</span>`}</td>
+          <td style="text-align:right">${r.days<r.expected*0.5?`<span class="tag warn">${r.days}/${r.expected}</span>`:`<span class="muted mono">${r.days}/${r.expected}</span>`}</td>
           <td style="text-align:right" class="mono">${r.tot?hm(r.tot):'<span class="muted">·</span>'}</td></tr>`).join('')}</tbody></table></div></div>
     </div></div>`;
 }
@@ -3495,10 +3711,34 @@ function studentAdminCard(){
 `;
 }
 
+/* 학교 관리 — 교육과정표 현황 */
+function curriCard(){
+  const cur=curri();
+  const st=students();
+  const picked=st.filter(s=>picksOf(s).length).length;
+  return `<div class="card mb"><div class="card-h"><h3>교육과정표</h3>
+    <span class="sub" style="margin-left:auto">${cur.length?`과목 ${cur.length}개`:'아직 없음'}</span></div>
+    <div class="card-b">
+      ${cur.length?`<div class="tiny muted mb-s">
+        학생들이 <b>과목 고르기</b> 화면에서 이 표를 보고 선택을 연습합니다.
+        지금까지 ${picked}명이 골라봤습니다.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${curriYears().map(g=>{
+        const n=cur.filter(c=>Number(c.grade)===g);
+        return `<span class="tag">${g}학년 ${n.length}과목 · 필수 ${n.filter(x=>x.required).length}개</span>`;}).join('')}</div>
+      <div class="tiny muted mt" style="line-height:1.9">
+        고치려면 <b>학생 → 명단 · 엑셀 관리</b>에서 양식을 받아 <b>교육과정</b> 시트를 채워 다시 올리세요.
+        올리면 기존 표는 새 내용으로 바뀝니다.</div>`
+      :`<div class="empty" style="padding:16px 0"><b>교육과정표를 올리면 과목 선택 기능이 켜집니다</b>
+        학생 화면에 <b>과목 고르기</b> 메뉴가 생기고, 자기가 고른 조합을 계열별 권장 과목과 견주어 볼 수 있습니다.
+        <br>학생 → 명단 · 엑셀 관리 → 양식 받기 → <b>교육과정</b> 시트를 채워 올리시면 됩니다.</div>`}
+    </div></div>`;
+}
+
 function viewSchool(){
   const st=pickedStudents(), cls=classList();
   return `${topbar('학교 관리', `${esc(S.school?.name||'')} · ${curYear()}학년도`)}
   <div class="wrap" style="max-width:1000px">
+    ${curriCard()}
     <div class="card mb"><div class="card-h"><h3>교사 관리</h3>
       <span class="sub">담당 학년·반을 배정합니다 (관리자만)</span>
       <button class="btn sm" data-act="loadteachers" style="margin-left:auto">목록 새로고침</button></div>
@@ -3568,13 +3808,14 @@ function shellStudent(){
   if(!s) return `<div class="auth"><div class="box"><div class="card"><div class="card-b">
     <div class="empty"><b>학생 정보를 찾을 수 없습니다</b>선생님께 접속코드를 다시 확인해주세요.</div>
     <button class="btn wide" data-act="logout">나가기</button></div></div></div></div>`;
+  const writeMode=S.filter.editType||s.logMode;
   const nav=(id,label,icon)=>`<button class="nav ${S.view===id?'on':''}" data-act="nav" data-v="${id}"><span>${icon}</span>${label}</button>`;
   return `<div class="shell">
     <aside class="side">
       <div class="brand"><div class="brand-mark">기</div><div><b>기록실</b><small>${esc(s.name)} · ${scode(s)}</small></div></div>
       <div class="navgroup"><span>학습일지</span>
-        ${nav('write',s.logMode==='weekly'?'이번 주 쓰기':'오늘 일지 쓰기','✎')}${nav('mine','내 기록 보기','◧')}
-        ${nav('me','나의 소개','◔')}</div>
+        ${nav('write',writeMode==='weekly'?'이번 주 쓰기':'오늘 일지 쓰기','✎')}${nav('mine','내 기록 보기','◧')}
+        ${nav('me','나의 소개','◔')}${curri().length?nav('pick','과목 고르기','⋔'):''}</div>
       ${S.mode==='demo'?`<div class="navgroup"><span>데모</span>
         <label class="f" style="margin:0 0 8px"><span style="font-size:12.5px">보고 있는 학생</span>
           <select data-act="demopick" style="font-size:14px">
@@ -3587,11 +3828,13 @@ function shellStudent(){
     <main class="main">${S.mode==='demo'?demoBanner('student'):''}${
       S.view==='mine' ? studentMine(s)
       : S.view==='me' ? studentProfile(s)
-      : (s.logMode==='weekly' ? studentWeek(s) : studentWrite(s))}</main>
+      : S.view==='pick' ? studentPick(s)
+      : (writeMode==='weekly' ? studentWeek(s) : studentWrite(s))}</main>
     <nav class="mob">
-      <button class="${S.view!=='mine'&&S.view!=='me'?'on':''}" data-act="nav" data-v="write"><i>✎</i>${s.logMode==='weekly'?'주간 쓰기':'일지 쓰기'}</button>
+      <button class="${!['mine','me','pick'].includes(S.view)?'on':''}" data-act="nav" data-v="write"><i>✎</i>${writeMode==='weekly'?'주간 쓰기':'일지 쓰기'}</button>
       <button class="${S.view==='mine'?'on':''}" data-act="nav" data-v="mine"><i>◧</i>내 기록</button>
-      <button class="${S.view==='me'?'on':''}" data-act="nav" data-v="me"><i>◔</i>나의 소개</button></nav></div>`;
+      <button class="${S.view==='me'?'on':''}" data-act="nav" data-v="me"><i>◔</i>소개</button>
+      ${curri().length?`<button class="${S.view==='pick'?'on':''}" data-act="nav" data-v="pick"><i>⋔</i>과목</button>`:''}</nav></div>`;
 }
 /* 주간 기록 — 매일 쓰기가 버거운 학생용.
    한 주를 통째로 한 번에 적습니다. 월요일 날짜로 저장하고 type='weekly' 로 구분합니다. */
@@ -3606,7 +3849,7 @@ function studentWeek(s){
     `<select data-act="setweek" style="width:auto">
       ${weeks.map(x=>`<option value="${x}" ${x===wkStart?'selected':''}>${kdate(x)} ~ ${kdate(addDays(x,6))}${x===wk(today())?' (이번 주)':''}</option>`).join('')}
      </select>
-     <button class="btn sm" data-act="setmode" data-v="daily">매일 쓰기로</button>`)}
+     <button class="btn sm" data-act="setmode" data-v="daily">매일 기록으로 바꾸기</button>`)}
   <div class="wrap" style="max-width:700px">
     ${studentErrBanner()}${installCard()}
     ${j.id?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
@@ -3667,16 +3910,16 @@ function studentWeek(s){
 
 function studentWrite(s){
   const date=S.filter.date||today();
-  const j=jrn({studentId:s.id}).find(x=>x.date===date)||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',tags:[]};
+  const j=jrn({studentId:s.id}).find(x=>x.date===date&&x.type!=='weekly')||{subjects:[{name:'',minutes:''}],difficult:[],memo:'',seed:'',mood:0,focus:0,good:'',hard:'',tags:[]};
   const tot=(j.subjects||[]).reduce((a,b)=>a+(Number(b.minutes)||0),0);
   const isToday=date===today();
   const g=studyStats(s.id);
   const yday=addDays(today(),-1);
-  const missedY = !C.journals.some(x=>x.studentId===s.id&&x.date===yday);
+  const missedY = !C.journals.some(x=>x.studentId===s.id&&x.date===yday&&x.type!=='weekly');
   return `${topbar(isToday?'오늘의 학습일지':`${kdate(date)} 학습일지`,
     j.id?'이미 쓴 일지입니다. 고치고 다시 저장하면 덮어써집니다.':'오늘 공부한 내용을 기록해보세요',
     `<input type="date" value="${date}" data-act="setdate" style="width:auto" max="${today()}">
-     <button class="btn sm" data-act="setmode" data-v="weekly">주간으로 쓰기</button>`)}
+     <button class="btn sm" data-act="setmode" data-v="weekly">주간 기록으로 바꾸기</button>`)}
   <div class="wrap" style="max-width:700px">
     ${studentErrBanner()}${installCard()}
     ${j.id?`<div class="card mb" style="border-color:var(--accent-line);background:var(--accent-wash);box-shadow:none">
@@ -3801,22 +4044,108 @@ function studentProfile(s){
   </div>`;
 }
 
+/* ── 과목 고르기 ──
+   판정하는 화면이 아닙니다. 자기가 고른 조합을 눈으로 보는 화면입니다. */
+function studentPick(s){
+  const cur=curri();
+  if(!cur.length) return `${topbar('과목 고르기','')}
+    <div class="wrap" style="max-width:700px">${studentErrBanner()}
+      <div class="card"><div class="card-b"><div class="empty">
+        <b>아직 교육과정표가 올라오지 않았습니다</b>
+        선생님이 우리 학교 과목 목록을 넣으면 여기서 골라볼 수 있습니다.</div></div></div></div>`;
+
+  const g=Number(S.filter.pg)||Math.min(...curriYears());
+  const picked=new Set(picksOf(s));
+  const ps=pickStat(s);
+  const tk=s.profile?.track||'';
+  const chk=tk?trackCheck(s,tk):null;
+  const areas=[...new Set(cur.filter(c=>Number(c.grade)===g).map(c=>c.area))];
+  const maxArea=Math.max(1,...Object.values(ps.byArea));
+
+  return `${topbar('과목 고르기', `${cur.length}개 과목 중 ${ps.got.length}개 선택 · ${ps.credit}학점`,
+    `${curriYears().map(y=>`<button class="btn sm ${y===g?'pri':''}" data-act="setpg" data-v="${y}">${y}학년</button>`).join('')}`)}
+  <div class="wrap" style="max-width:860px">
+    ${studentErrBanner()}
+    <div class="card mb" style="box-shadow:none;background:var(--surface-2)"><div class="card-b" style="padding:13px 15px">
+      <div class="tiny muted" style="line-height:1.9">
+        실제 신청이 아니라 <b>연습</b>입니다. 눌러서 담아보고 지워도 아무 일도 일어나지 않습니다.<br>
+        고른 내용은 담임 선생님이 보고 상담할 때 씁니다. 정답이 있는 게 아니니 편하게 해보세요.</div></div></div>
+
+    <div class="grid g3 keep mb">
+      ${statCard(`${ps.credit}<span style="font-size:15px;color:var(--muted)">학점</span>`,'담은 학점')}
+      ${statCard(`${ps.got.length}<span style="font-size:15px;color:var(--muted)">과목</span>`,'담은 과목')}
+      ${statCard(`${Object.keys(ps.byArea).length}<span style="font-size:15px;color:var(--muted)">개</span>`,'교과 영역')}
+    </div>
+
+    ${Object.keys(ps.byArea).length?`<div class="card mb"><div class="card-h"><h3>교과별 학점</h3>
+      <span class="sub" style="margin-left:auto">어디에 치우쳐 있는지 보입니다</span></div>
+      <div class="card-b">${barList(Object.entries(ps.byArea).sort((a,b)=>b[1]-a[1]),n=>`${n}학점`)}</div></div>`:''}
+
+    ${(()=>{ // 진로 계열 대조
+      return `<div class="card mb"><div class="card-h"><h3>내 진로와 견주어 보기</h3></div><div class="card-b">
+        <div class="row mb-s" style="gap:6px;flex-wrap:wrap">
+          ${TRACKS.map(t=>`<button class="btn sm ${tk===t.k?'pri':''}" data-act="settrack" data-v="${t.k}">${t.label}</button>`).join('')}
+          ${tk?`<button class="btn ghost sm" data-act="settrack" data-v="">해제</button>`:''}</div>
+        ${!tk?`<div class="tiny muted" style="line-height:1.9">
+            관심 있는 계열을 누르면, 그 계열에서 <b>자주 권하는 과목</b>과 견주어 볼 수 있습니다.
+            ${s.profile?.career?`나의 소개에 적은 희망 진로는 <b>${esc(s.profile.career)}</b>입니다.`:''}</div>`
+        :`<div class="tiny muted mb-s">${esc(chk.track.desc)}</div>
+          ${['core','want'].map(kind=>{ const list=chk[kind]; if(!list.length) return '';
+            return `<div style="margin-bottom:13px">
+              <div class="tiny muted mb-s">${kind==='core'?'특히 자주 언급되는 과목':'함께 권하는 과목'}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">${list.map(x=>
+                `<span class="tag ${x.got?'on':''}" style="${!x.offered?'opacity:.45':''}">
+                  ${x.got?'✓ ':''}${esc(x.name)}${!x.offered?' <span style="opacity:.8">우리 학교 미개설</span>':''}</span>`).join('')}</div></div>`;}).join('')}
+          <div class="card" style="box-shadow:none;background:var(--surface-2)"><div class="card-b" style="padding:12px 14px">
+            <div class="tiny muted" style="line-height:1.9">
+              <b>안 고른 과목이 있다고 못 가는 게 아닙니다.</b> 대학·학과마다 다르고 해마다 바뀝니다.
+              여기 목록은 여러 대학이 자주 언급하는 과목을 모은 것일 뿐입니다.
+              진짜 판단은 담임 선생님과 함께, 가고 싶은 대학이 실제로 공개한 자료를 보고 하세요.</div></div></div>`}
+      </div></div>`; })()}
+
+    <div class="card"><div class="card-h"><h3>${g}학년 과목</h3>
+      <span class="sub" style="margin-left:auto">눌러서 담고, 다시 눌러서 뺍니다</span></div>
+      <div class="card-b">
+        ${areas.map(ar=>{
+          const list=cur.filter(c=>Number(c.grade)===g&&c.area===ar)
+            .sort((a,b)=>(a.semester-b.semester)||a.name.localeCompare(b.name,'ko'));
+          const mine=list.filter(c=>picked.has(c.id)||c.required)
+            .reduce((a,b)=>a+(Number(b.credit)||0),0);
+          return `<div style="margin-bottom:18px">
+            <div class="spread mb-s"><b class="small">${esc(ar)}</b>
+              <span class="tiny muted">${mine?`${mine}학점 담음`:'아직 없음'}</span></div>
+            <div class="tagpick">${list.map(c=>{
+              const on=picked.has(c.id)||c.required;
+              return `<button type="button" class="tagbtn ${on?'on':''}" ${c.required?'disabled style="opacity:.75;cursor:default"':''}
+                data-act="picksubj" data-v="${c.id}" title="${c.kind} · ${c.credit}학점">
+                ${esc(c.name)} <span style="opacity:.7;font-size:13px">${c.credit}</span>${c.required?' <span style="opacity:.7;font-size:12.5px">필수</span>':''}</button>`;
+            }).join('')}</div></div>`;}).join('')}
+      </div></div>
+  </div>`;
+}
+const statCard=(n,l,d='')=>`<div class="card stat"><div class="n mono">${n}</div><div class="l">${l}</div>${d?`<div class="d">${d}</div>`:''}</div>`;
+
 function studentMine(s){
-  const js=jrn({studentId:s.id}), last=js.filter(j=>j.date>=addDays(today(),-13));
-  const series=[]; for(let i=13;i>=0;i--){const d=addDays(today(),-i),j=js.find(x=>x.date===d);
-    series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});}
+  const js=jrn({studentId:s.id}), nums=numericJournals(js), weekly=s.logMode==='weekly';
+  const last=nums.filter(j=>j.date>=addDays(today(),weekly?-55:-13));
+  const series=[];
+  if(weekly){ for(let i=7;i>=0;i--){ const w0=addDays(wk(today()),-7*i);
+      const inw=nums.filter(x=>x.date>=w0&&x.date<=addDays(w0,6));
+      series.push({label:kdate(w0).slice(0,-3),value:inw.reduce((a,b)=>a+(b.totalMinutes||0),0)}); } }
+  else { for(let i=13;i>=0;i--){const d=addDays(today(),-i),j=nums.find(x=>x.date===d);
+      series.push({label:new Date(d).getDate(),value:j?j.totalMinutes:0});} }
   const bySub={}; last.forEach(j=>(j.subjects||[]).forEach(x=>{const k=x.group||x.name;bySub[k]=(bySub[k]||0)+x.minutes;}));
   const tot=last.reduce((a,b)=>a+b.totalMinutes,0);
-  return `${topbar('내 기록','최근 2주 학습 현황')}
+  return `${topbar('내 기록',weekly?'최근 8주 학습 현황':'최근 2주 학습 현황')}
   <div class="wrap" style="max-width:760px;padding-bottom:0">
     ${studentErrBanner()}
     <div class="tiny muted mb">지난 일지의 <b>고치기</b>를 누르면 그날 내용을 다시 쓸 수 있습니다. 새로 생기지 않고 덮어써집니다.</div>
   </div>
   <div class="wrap" style="max-width:760px">
     ${achieveCard(s.id,true)}
-    <div class="grid g3 keep mb">${stat(hm(tot),'2주 총 공부시간')}${stat(`${last.length}일`,'기록한 날')}
-      ${stat(hm(last.length?Math.round(tot/last.length):0),'기록한 날 평균')}</div>
-    <div class="card mb"><div class="card-h"><h3>공부시간 추이</h3><span class="sub">최근 14일</span></div>
+    <div class="grid g3 keep mb">${stat(hm(tot),weekly?'8주 총 공부시간':'2주 총 공부시간')}${stat(`${last.length}회`,'기록 횟수')}
+      ${stat(hm(last.length?Math.round(tot/last.length):0),'기록 1회 평균')}</div>
+    <div class="card mb"><div class="card-h"><h3>공부시간 추이</h3><span class="sub">${weekly?'최근 8주':'최근 14일'}</span></div>
       <div class="card-b">${barChart(series)}</div></div>
     <div class="card mb"><div class="card-h"><h3>과목별 공부량</h3></div>
       <div class="card-b">${Object.keys(bySub).length?barList(Object.entries(bySub).sort((a,b)=>b[1]-a[1]),hm):'<div class="empty">아직 기록이 없습니다.</div>'}</div></div>
@@ -3837,7 +4166,8 @@ function studentMine(s){
           <span class="row" style="gap:6px">
           ${j.totalMinutes?`<span class="tag">${hm(j.totalMinutes)}</span>`:''}
           ${j.focus?`<span class="tag">집중 ${focusLabel(j.focus)}</span>`:''}
-          <button class="btn sm pri" data-act="editj" data-d="${j.date}">고치기</button></span></div>
+          ${j.type==='weekly'?'<span class="tag">주간</span>':''}
+          <button class="btn sm pri" data-act="editj" data-d="${j.date}" data-t="${j.type==='weekly'?'weekly':'daily'}">고치기</button></span></div>
         <div class="tiny muted mt-s">${(j.subjects||[]).map(x=>`${esc(x.name)} ${x.minutes}분`).join(' · ')}</div>
         ${(j.difficult||[]).length?`<div class="small mt-s" style="color:var(--warn)">⌇ ${j.difficult.map(d=>esc(d.content)).join(' / ')}</div>`:''}
         ${j.seed?`<div class="small mt-s" style="color:var(--accent-ink)">✦ ${esc(j.seed)}</div>`:''}</div>`).join('')
@@ -3918,7 +4248,7 @@ function modal(title,body,foot){
     <div class="card-h"><h3>${title}</h3><button class="btn ghost sm" data-act="closemodal" style="margin-left:auto">닫기</button></div>
     <div class="card-b">${body}</div>${foot?`<div class="card-b" style="border-top:1px solid var(--line-2)">${foot}</div>`:''}</div></div>`;
   bind();
-  requestAnimationFrame(()=>{ const root=$('#modalroot .modal');
+  raf(()=>{ const root=$('#modalroot .modal');
     (root?.querySelector('input:not([readonly]),textarea,select')||root?.querySelector('button'))?.focus({preventScroll:true}); });
 }
 const closeModal=()=>$('#modalroot').innerHTML='';
@@ -3953,7 +4283,9 @@ function handle(act,el){
     S.authMsg=''; render(); },
   demo(){ DB.cloud=false; S.mode='demo';
     S.me={role:'admin',name:'데모 교사',classes:[],homeroom:'3-2'};
-    S.school={id:'demo',name:'데모 고등학교',currentYear:schoolYear(),teacherCode:'DEMOTCH1',adminCode:'DEMOADM1'};
+    S.school={id:'demo',name:'데모 고등학교',currentYear:schoolYear(),teacherCode:'DEMOTCH1',adminCode:'DEMOADM1',
+      curriculum:(()=>{ try{ const v=LS.get('gs.demo.curriculum'); if(v) return JSON.parse(v); }catch(e){}
+        return demoCurriculum(); })()};
     S.year=schoolYear();
     DB.loadAll().then(()=>{S.view='home';render();}); },
   signin(){ busy(el,async()=>{ const f=new FormData($('#af'));
@@ -4018,7 +4350,7 @@ function handle(act,el){
     C={students:[],records:[],journals:[],counsels:[],briefs:[]}; render(); },
 
   /* 내비 */
-  nav(){ S.view=el.dataset.v; S.sel=null; render(); },
+  nav(){ S.view=el.dataset.v; S.sel=null; if(S.view==='write') S.filter.editType=null; render(); },
   open(){ S.view='students'; S.sel=el.dataset.id; S.tab=el.dataset.tab||'journal'; render(); },
   back(){ S.sel=null; render(); },
   tab(){ S.tab=el.dataset.t; render(); },
@@ -4033,7 +4365,10 @@ function handle(act,el){
   cclear(){ S.filter.cfrom=''; S.filter.cto=''; render(); },
   exparea(){ S.area=el.dataset.a; render(); },
   setdate(){ S.filter.date=el.value; render(); },
-  editj(){ S.view='write'; S.filter.date=el.dataset.d; render(); },
+  editj(){ const t=el.dataset.t||'daily'; S.view='write'; S.filter.editType=t;
+    if(t==='weekly'){ S.filter.week=el.dataset.d; S.filter.date=null; }
+    else { S.filter.date=el.dataset.d; S.filter.week=null; }
+    render(); },
   print(){ window.print(); },
   closemodal(){ closeModal(); },
 
@@ -4156,9 +4491,9 @@ function handle(act,el){
   setmode(){ busy(el,async()=>{ const s=student(S.me.studentId); if(!s) return;
     const v=el.dataset.v;
     await DB.put('students',{...s,logMode:v});
-    S.filter.week=null; S.filter.date=null;
-    toast(v==='weekly'?'주간 기록 모드로 바꿨습니다. 한 주를 한 번에 적으면 됩니다.'
-                      :'매일 기록 모드로 바꿨습니다.',4000);
+    S.filter.week=null; S.filter.date=null; S.filter.editType=null;
+    toast(v==='weekly'?'주간 기록으로 바꿨습니다. 기존 일간 기록은 그대로 남습니다.'
+                      :'매일 기록으로 바꿨습니다. 기존 주간 기록은 그대로 남습니다.',4500);
     render(); }); },
   setweek(){ S.filter.week=el.value; render(); },
   setdays(){ const v=el.dataset.v;
@@ -4167,6 +4502,24 @@ function handle(act,el){
   saveweek(){ busy(el,saveWeek); },
   saveprofile(){ busy(el,saveProfile); },
   /* 학교생활 태그 고르기 — "별일 없었다"는 나머지와 함께 켜지지 않습니다 */
+  setpg(){ S.filter.pg=Number(el.dataset.v); render(); },
+  /* 과목 담기 — 학생이 자기 profile 안에 저장합니다 (보안 규칙 그대로) */
+  picksubj(){ busy(el,async()=>{
+    const s=student(S.me.studentId), id=el.dataset.v;
+    const c=curri().find(x=>x.id===id); if(!c||c.required) return;
+    const cur=new Set(picksOf(s));
+    cur.has(id)?cur.delete(id):cur.add(id);
+    const pf={...(s.profile||{}), picks:[...cur]};
+    try{ await DB.put('students',{id:s.id,profile:pf,profileAt:Date.now()}); render(); }
+    catch(e){ toast(e?.code==='permission-denied'
+      ? '보안 규칙이 아직 옛 버전입니다. 선생님께 알려주세요.' : '저장하지 못했습니다: '+emsg(e),4500); }
+  }); },
+  settrack(){ busy(el,async()=>{
+    const s=student(S.me.studentId);
+    const pf={...(s.profile||{}), track:el.dataset.v};
+    try{ await DB.put('students',{id:s.id,profile:pf,profileAt:Date.now()}); render(); }
+    catch(e){ toast('저장하지 못했습니다: '+emsg(e),4000); }
+  }); },
   ttag(){ const k=el.dataset.k, box=$('#tagval');
     let cur=(box.value||'').split(',').filter(Boolean);
     if(cur.includes(k)) cur=cur.filter(x=>x!==k);
@@ -4538,12 +4891,12 @@ function handle(act,el){
     if(S.showTools&&panel&&!JP_MOTION.reduced()&&panel.animate){
       panel.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(-6px)'}],
         {duration:180,easing:'cubic-bezier(.4,0,.2,1)'}).finished.finally(()=>{ S.showTools=false; render(); });
-    }else{ S.showTools=!S.showTools; render(); requestAnimationFrame(()=>JP_MOTION.added($('.jp-expand'))); }
+    }else{ S.showTools=!S.showTools; render(); raf(()=>JP_MOTION.added($('.jp-expand'))); }
   },
   fixdupes(){ busy(el,async()=>{
     const seen=new Map(); const kill=[];
     C.journals.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(j=>{
-      const k=j.studentId+'|'+j.date;
+      const k=j.studentId+'|'+j.date+'|'+(j.type==='weekly'?'weekly':'daily');
       if(seen.has(k)) kill.push(j); else seen.set(k,j); });
     if(!kill.length){ toast('정리할 중복이 없습니다'); return; }
     if(!confirm(`중복 ${kill.length}건을 지웁니다.\n각 날짜의 마지막 저장본은 남습니다. 계속할까요?`)) return;
@@ -4668,7 +5021,7 @@ async function saveWeek(){
     memo:$('[name=memo]').value.trim(),seed:$('[name=seed]').value.trim(),
     mood:Number($('#moodval')?.value)||0, focus:Number($('#focusval')?.value)||0,
     good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||'', tags});
-  toast('주간 일지를 저장했습니다'); S.view='mine'; S.filter.week=null; render();
+  toast('주간 일지를 저장했습니다'); S.view='mine'; S.filter.week=null; S.filter.editType=null; render();
 }
 
 async function saveJournal(){
@@ -4685,7 +5038,7 @@ async function saveJournal(){
   const difficult=$$('#diffs .diffrow').map(r=>({subject:r.querySelector('.jdif-s').value.trim(),
     content:r.querySelector('.jdif-c').value.trim()})).filter(x=>x.content);
   // 같은 날짜에 여러 건이 있으면 하나로 합치고 나머지는 지웁니다
-  const sameDay=C.journals.filter(x=>x.studentId===s.id&&x.date===date)
+  const sameDay=C.journals.filter(x=>x.studentId===s.id&&x.date===date&&x.type!=='weekly')
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
   const cur=sameDay[0];
   for(const extra of sameDay.slice(1)) await DB.del('journals',extra.id);
@@ -4694,7 +5047,7 @@ async function saveJournal(){
     memo:$('[name=memo]').value.trim(),seed:$('[name=seed]').value.trim(),
     mood:Number($('#moodval')?.value)||0, focus:Number($('#focusval')?.value)||0,
     good:$('[name=good]')?.value.trim()||'', hard:$('[name=hard]')?.value.trim()||'', tags});
-  toast('학습일지를 저장했습니다'); S.view='mine'; S.filter.date=null; render();
+  toast('학습일지를 저장했습니다'); S.view='mine'; S.filter.date=null; S.filter.editType=null; render();
 }
 
 /* ═════════════ 부팅 ═════════════ */
