@@ -40,6 +40,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 html,body{height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
 .mono,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -59,9 +60,9 @@ p{margin:0}
 .count{margin-left:auto;font-family:var(--f-mono);font-size:13px;color:var(--ink3);white-space:nowrap;padding-left:12px}
 
 /* deck */
-.deck{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;min-height:0}
+.deck{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;min-height:0}
 .deck::-webkit-scrollbar{display:none}
-.slide{flex:0 0 100%;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;overflow-x:hidden;min-width:0}
+.slide{flex:0 0 100%;width:100%;overscroll-behavior-y:contain;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;overflow-x:hidden;min-width:0}
 .si{max-width:1080px;margin:0 auto;padding-inline:clamp(16px,4vw,48px);padding-block:clamp(24px,4vh,48px) 56px;display:grid;gap:20px;align-content:start;min-height:100%}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:4px 10px;border-radius:999px;justify-self:start}
 .tag.stu{color:var(--easy-ink);background:var(--easy)}
@@ -278,11 +279,6 @@ ul.plain{margin:0;padding-left:18px;display:grid;gap:6px;font-size:15px;color:va
 
 
 /* motion: 쪽에 들어올 때 한 번. 기본 상태는 모두 보이고, .play가 붙을 때만 들어오는 동작을 재생한다. */
-.slide{view-timeline:--sl inline}
-@supports (animation-timeline: view()){
-  .si{animation:edge linear both;animation-timeline:--sl;animation-range:cover 0% cover 100%}
-  @keyframes edge{0%{opacity:.25;transform:scale(.97)}38%,62%{opacity:1;transform:none}100%{opacity:.25;transform:scale(.97)}}
-}
 .slide.play .si > *{animation:enter 460ms var(--ease-out) both;animation-delay:calc(var(--i,0) * 60ms)}
 @keyframes enter{from{opacity:0;transform:translateX(calc(var(--dir,1) * 32px))}to{opacity:1;transform:none}}
 .slide.play .hb .track,.slide.play .sbar,.slide.play .trio .t,.slide.play .bfrow .r,.slide.play .grades{animation:wipe 760ms var(--ease-out) both;animation-delay:calc(220ms + var(--j,0) * 45ms)}
@@ -1121,9 +1117,14 @@ document.querySelectorAll('.term').forEach(t => bindTip(t, `<b>${esc(t.textConte
     slide.classList.remove('play'); slide.style.setProperty('--dir', dir); void slide.offsetWidth; slide.classList.add('play');
     slide.querySelectorAll('.kpi .v, .fact b, .hero-num .n, .seats b').forEach(countUp);
   }
+  // 쪽 위치는 실제 화면 좌표로 계산한다(소수점 너비에서도 어긋나지 않게).
+  let target = null;
+  const leftOf = i => deck.scrollLeft + slides[i].getBoundingClientRect().left - deck.getBoundingClientRect().left;
+  const indexNow = () => { const w = slides[0].getBoundingClientRect().width || deck.clientWidth; return Math.max(0, Math.min(N-1, Math.round(deck.scrollLeft / w))); };
   function go(i, smooth){
     i = Math.max(0, Math.min(N-1, i));
-    deck.scrollTo({left: i * deck.clientWidth, behavior: smooth && !reduce ? 'smooth' : 'auto'});
+    target = i;
+    deck.scrollTo({left: leftOf(i), behavior: smooth && !reduce ? 'smooth' : 'auto'});
     setCur(i);
   }
   function setCur(i){
@@ -1141,8 +1142,17 @@ document.querySelectorAll('.term').forEach(t => bindTip(t, `<b>${esc(t.textConte
     play(slides[i], dir);
     try { history.replaceState(null, '', '#s' + (i+1)); } catch(e) {}
   }
-  const io = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) setCur(slides.indexOf(e.target)); }); }, {root: deck, threshold: 0.6});
-  slides.forEach(s => io.observe(s));
+  // 쪽 번호는 얼마나 밀었는지로 정한다. 사파리를 포함한 모든 브라우저에서 같은 결과.
+  let ticking = false, settleTimer = null;
+  const onScroll = () => {
+    if (!ticking){ ticking = true; requestAnimationFrame(() => { ticking = false; if (target === null) setCur(indexNow()); }); }
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => { target = null; setCur(indexNow()); }, 140);
+  };
+  deck.addEventListener('scroll', onScroll, {passive: true});
+  deck.addEventListener('scrollend', () => { target = null; setCur(indexNow()); });
+  // 손가락으로 밀기 시작하면 버튼 이동 목표는 버린다
+  deck.addEventListener('touchstart', () => { target = null; }, {passive: true});
   $('#prev').addEventListener('click', () => go(cur-1, true));
   $('#next').addEventListener('click', () => go(cur+1, true));
   parts.forEach(p => p.addEventListener('click', () => go(+p.dataset.go, true)));
@@ -1154,7 +1164,11 @@ document.querySelectorAll('.term').forEach(t => bindTip(t, `<b>${esc(t.textConte
     else if (e.key === 'Home'){ e.preventDefault(); go(0, false); }
     else if (e.key === 'End'){ e.preventDefault(); go(N-1, false); }
   });
-  addEventListener('resize', () => deck.scrollTo({left: cur * deck.clientWidth, behavior: 'auto'}));
+  // 화면 크기나 방향이 바뀌면 지금 쪽에 다시 맞춘다
+  let rz = null;
+  const realign = () => { clearTimeout(rz); rz = setTimeout(() => { target = cur; deck.scrollTo({left: leftOf(cur), behavior: 'auto'}); setTimeout(() => { target = null; }, 60); }, 80); };
+  addEventListener('resize', realign);
+  addEventListener('orientationchange', realign);
   const m = /^#s(\d+)$/.exec(location.hash || '');
   setCur(0);
   if (m) requestAnimationFrame(() => go(+m[1]-1, false));
