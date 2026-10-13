@@ -5199,6 +5199,12 @@ function installCard(){
 }
 
 settings.migrate();
+import('./ieum-bridge.mjs').then(({startRecordBridge})=>startRecordBridge({
+ state:()=>({uid:FB.auth?.currentUser?.uid,mode:S.mode,role:S.me?.role,approved:S.me?.approved,schoolId:S.school?.id,projectId:CFG().projectId}),
+ canRead:s=>inScope(s),
+ read:async id=>{const {doc,getDoc,collection,query,where,getDocs}=FB.fs;const own=await getDoc(doc(FB.db,'schools',S.school.id,'students',id));if(!own.exists())throw Error('기록장 학생을 찾지 못했습니다.');const pupil={id:own.id,...own.data()};if(!inScope(pupil))throw Error('기록장 담당 학급을 확인해주세요.');const values=await Promise.all(['journals','counsels','records'].map(async name=>{const r=await getDocs(query(collection(FB.db,'schools',S.school.id,name),where('studentId','==',id)));return [name,r.docs.map(d=>({id:d.id,...d.data()}))];}));return{student:pupil,...Object.fromEntries(values)};},
+ open:(id,status)=>{S.view='students';S.sel=id;S.tab='journal';render();if(status!=='enrolled')toast('이음에서 보관 중인 학생입니다. 기존 기록을 조회합니다.',5000);}
+})).catch(()=>{});
 boot();
 window.기록실={ get C(){return C;}, get S(){return S;}, reset(){ LS.del(LKEY); location.reload(); } };
 </script>
